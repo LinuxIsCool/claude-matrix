@@ -1,4 +1,3 @@
 server/node_modules/
 server/build/
 *.tsbuildinfo
-.claude/local/
