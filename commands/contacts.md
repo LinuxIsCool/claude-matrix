@@ -1,9 +1,9 @@
 ---
 description: List all known Claude Code agents on this machine
-allowed-tools: mcp__claudematrix__list_agents
+allowed-tools: mcp__claude-matrix__list_agents
 ---
 
-Show the ClaudeMatrix contacts list.
+Show the Claude Matrix contacts list.
 
 Call `list_agents` and format as a contacts directory:
 

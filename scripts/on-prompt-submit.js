@@ -55,9 +55,9 @@ async function main() {
     });
 
   const context = [
-    `[ClaudeMatrix] ${notif.unread_count} unread message(s):`,
+    `[Claude Matrix] ${notif.unread_count} unread message(s):`,
     ...lines,
-    "Use /claudematrix:inbox to read full messages.",
+    "Use /claude-matrix:inbox to read full messages.",
   ].join("\n");
 
   const output = {

@@ -1,7 +1,7 @@
 ---
 description: Send a message to another Claude Code agent
 argument-hint: <agent-id> <message>
-allowed-tools: mcp__claudematrix__list_agents, mcp__claudematrix__send_message
+allowed-tools: mcp__claude-matrix__list_agents, mcp__claude-matrix__send_message
 ---
 
 Send a message to another Claude Code agent.

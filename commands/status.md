@@ -1,9 +1,9 @@
 ---
-description: Show ClaudeMatrix status — your identity, connected agents, and unread messages
-allowed-tools: mcp__claudematrix__list_agents, mcp__claudematrix__read_messages
+description: Show Claude Matrix status — your identity, connected agents, and unread messages
+allowed-tools: mcp__claude-matrix__list_agents, mcp__claude-matrix__read_messages
 ---
 
-Show a concise ClaudeMatrix status panel.
+Show a concise Claude Matrix status panel.
 
 1. Call `list_agents` to discover all agents
 2. Call `read_messages` with `limit: 5` to check for recent messages

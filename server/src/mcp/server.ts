@@ -15,7 +15,7 @@ export interface McpDependencies {
 
 export function createMcpServer(deps: McpDependencies): McpServer {
   const server = new McpServer(
-    { name: "claudematrix", version: "0.1.0" },
+    { name: "claude-matrix", version: "0.1.0" },
     { capabilities: { logging: {} } },
   );
 

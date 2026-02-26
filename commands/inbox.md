@@ -1,9 +1,9 @@
 ---
-description: Read your ClaudeMatrix inbox — all unread messages
-allowed-tools: mcp__claudematrix__read_messages
+description: Read your Claude Matrix inbox — all unread messages
+allowed-tools: mcp__claude-matrix__read_messages
 ---
 
-Show the full ClaudeMatrix inbox.
+Show the full Claude Matrix inbox.
 
 Call `read_messages` with `limit: 50` to retrieve messages.
 

@@ -43,7 +43,7 @@ async function main() {
   const dataDir = process.env.CLAUDEMATRIX_DATA_DIR || join(homedir(), ".claude", "local", "claudematrix");
 
   let contextParts = [
-    `[ClaudeMatrix] You are agent: ${agentId}`,
+    `[Claude Matrix] You are agent: ${agentId}`,
     `Project: ${projectDir}`,
   ];
 
@@ -85,14 +85,14 @@ async function main() {
   try {
     const notif = JSON.parse(readFileSync(notifFile, "utf8"));
     if (notif.unread_count > 0) {
-      contextParts.push(`${notif.unread_count} unread message(s). Use /claudematrix:inbox to read.`);
+      contextParts.push(`${notif.unread_count} unread message(s). Use /claude-matrix:inbox to read.`);
     }
   } catch {
     // No notifications yet
   }
 
   contextParts.push(
-    "Use /claudematrix:send to message other agents. Use /claudematrix:contacts to see who's online."
+    "Use /claude-matrix:send to message other agents. Use /claude-matrix:contacts to see who's online."
   );
 
   const context = contextParts.join("\n");

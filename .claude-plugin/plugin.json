@@ -1,5 +1,5 @@
 {
-  "name": "claudematrix",
+  "name": "claude-matrix",
   "version": "0.1.0",
   "description": "Inter-instance messaging for Claude Code via Matrix-shaped protocol",
   "author": {

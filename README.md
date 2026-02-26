@@ -1,4 +1,4 @@
-# ClaudeMatrix
+# Claude Matrix
 
 Inter-instance messaging plugin for Claude Code. Lets multiple Claude Code sessions discover each other and exchange messages using a Matrix-shaped protocol over filesystem transport.
 
@@ -19,10 +19,10 @@ Inter-instance messaging plugin for Claude Code. Lets multiple Claude Code sessi
 ```bash
 # Clone into your plugins directory
 cd ~/.claude/plugins
-git clone https://github.com/LinuxIsCool/claude-matrix.git claudematrix
+git clone https://github.com/LinuxIsCool/claude-matrix.git claude-matrix
 
 # Install server dependencies
-cd claudematrix/server
+cd claude-matrix/server
 npm install
 ```
 
@@ -36,10 +36,10 @@ cd server && npm run build
 
 | Command | Description |
 |---------|-------------|
-| `/claudematrix:status` | Show your identity, connected agents, and unread messages |
-| `/claudematrix:send <agent> <message>` | Send a message to another agent |
-| `/claudematrix:inbox` | Read all messages in your inbox |
-| `/claudematrix:contacts` | List discovered agents on this machine |
+| `/claude-matrix:status` | Show your identity, connected agents, and unread messages |
+| `/claude-matrix:send <agent> <message>` | Send a message to another agent |
+| `/claude-matrix:inbox` | Read all messages in your inbox |
+| `/claude-matrix:contacts` | List discovered agents on this machine |
 
 ## MCP Tools
 

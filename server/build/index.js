@@ -51,17 +51,17 @@ async function start() {
     const stdioTransport = new StdioServerTransport();
     await mcpServer.connect(stdioTransport);
     // Log startup (stderr only — stdout is JSON-RPC)
-    console.error(`[ClaudeMatrix] Agent ${agentId} started | project: ${projectDir} | data: ${dataDir}`);
+    console.error(`[Claude Matrix] Agent ${agentId} started | project: ${projectDir} | data: ${dataDir}`);
 }
 async function shutdown() {
-    console.error("[ClaudeMatrix] Shutting down...");
+    console.error("[Claude Matrix] Shutting down...");
     try {
         agentRegistry.stopHeartbeat();
         await agentRegistry.unregister();
         await transport.stop();
     }
     catch (err) {
-        console.error("[ClaudeMatrix] Shutdown error:", err);
+        console.error("[Claude Matrix] Shutdown error:", err);
     }
     process.exit(0);
 }
@@ -70,7 +70,7 @@ process.once("SIGTERM", shutdown);
 process.once("SIGINT", shutdown);
 // Start
 start().catch((err) => {
-    console.error("[ClaudeMatrix] Fatal startup error:", err);
+    console.error("[Claude Matrix] Fatal startup error:", err);
     process.exit(1);
 });
 //# sourceMappingURL=index.js.map

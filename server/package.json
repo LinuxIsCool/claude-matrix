@@ -1,5 +1,5 @@
 {
-  "name": "claudematrix-server",
+  "name": "claude-matrix-server",
   "version": "0.1.0",
   "type": "module",
   "main": "build/index.js",
