@@ -8,7 +8,7 @@ export interface MessageFilter {
 
 export interface ReadResult {
   messages: MatrixEvent[];
-  total_unread: number;
+  messages_returned: number;
 }
 
 export interface NotificationFile {

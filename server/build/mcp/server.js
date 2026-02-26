@@ -1,0 +1,12 @@
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { registerSendMessage } from "./tools/send_message.js";
+import { registerReadMessages } from "./tools/read_messages.js";
+import { registerListAgents } from "./tools/list_agents.js";
+export function createMcpServer(deps) {
+    const server = new McpServer({ name: "claudematrix", version: "0.1.0" }, { capabilities: { logging: {} } });
+    registerSendMessage(server, deps.messageStore, deps.agentRegistry);
+    registerReadMessages(server, deps.messageStore, deps.notificationBuffer);
+    registerListAgents(server, deps.agentRegistry, deps.selfAgentId);
+    return server;
+}
+//# sourceMappingURL=server.js.map

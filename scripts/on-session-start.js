@@ -22,7 +22,7 @@ async function main() {
   }
 
   const sessionId = input.session_id;
-  if (!sessionId) {
+  if (!sessionId || !/^[0-9a-f\-]+$/i.test(sessionId)) {
     process.exit(0);
   }
 

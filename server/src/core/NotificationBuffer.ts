@@ -39,8 +39,7 @@ export class NotificationBuffer {
       clearTimeout(this.writeDebounceTimer);
       this.writeDebounceTimer = null;
     }
-    const items = [...this.unread];
-    this.unread = [];
+    const items = this.unread.splice(0);
     this.writeNotificationFile();
     return items;
   }

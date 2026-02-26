@@ -23,6 +23,16 @@ export function registerSendMessage(
     },
     async ({ to, message }) => {
       try {
+        // Block self-sends
+        if (to === store.agentId) {
+          return {
+            content: [
+              { type: "text" as const, text: "Cannot send a message to yourself." },
+            ],
+            isError: true,
+          };
+        }
+
         // Validate recipient exists
         const agents = await registry.getAll();
         const recipient = agents.find((a) => a.agent_id === to);

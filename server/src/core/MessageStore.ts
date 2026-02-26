@@ -8,18 +8,22 @@ import type {
 } from "../types/index.js";
 
 export class MessageStore {
+  readonly agentId: string;
+
   constructor(
     private readonly transport: Transport,
-    private readonly selfAgentId: string,
+    selfAgentId: string,
     private readonly projectDir: string,
-  ) {}
+  ) {
+    this.agentId = selfAgentId;
+  }
 
   async send(toAgentId: string, body: string): Promise<MatrixEvent> {
     const event: MatrixEvent = {
       event_id: crypto.randomUUID(),
       type: "com.claudematrix.message",
-      sender: this.selfAgentId,
-      room_id: this.deriveRoomId(this.selfAgentId, toAgentId),
+      sender: this.agentId,
+      room_id: this.deriveRoomId(this.agentId, toAgentId),
       origin_server_ts: Date.now(),
       content: {
         msgtype: "m.text",
@@ -36,13 +40,13 @@ export class MessageStore {
 
   async read(filter?: MessageFilter): Promise<ReadResult> {
     const messages = await this.transport.readMessages(
-      this.selfAgentId,
+      this.agentId,
       filter,
     );
 
     return {
       messages,
-      total_unread: messages.length,
+      messages_returned: messages.length,
     };
   }
 

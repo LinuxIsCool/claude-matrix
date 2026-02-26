@@ -80,6 +80,7 @@ export class FileTransport implements Transport {
     if (!recipientId) {
       throw new Error(`Cannot determine recipient from room_id: ${event.room_id}`);
     }
+    FileTransport.validateAgentId(recipientId);
 
     const recipientInbox = path.join(this.messagesDir, recipientId);
     fs.mkdirSync(recipientInbox, { recursive: true });
@@ -92,6 +93,7 @@ export class FileTransport implements Transport {
   }
 
   async registerAgent(agent: AgentRegistration): Promise<void> {
+    FileTransport.validateAgentId(agent.agent_id);
     const record: AgentRecord = {
       agent_id: agent.agent_id,
       session_id: agent.session_id,
@@ -111,6 +113,7 @@ export class FileTransport implements Transport {
   }
 
   async unregisterAgent(agentId: string): Promise<void> {
+    FileTransport.validateAgentId(agentId);
     const filePath = path.join(this.agentsDir, `${agentId}.json`);
     try {
       fs.unlinkSync(filePath);
@@ -165,6 +168,7 @@ export class FileTransport implements Transport {
     agentId: string,
     filter?: MessageFilter,
   ): Promise<MatrixEvent[]> {
+    FileTransport.validateAgentId(agentId);
     const inboxDir = path.join(this.messagesDir, agentId);
 
     let files: string[];
@@ -206,6 +210,7 @@ export class FileTransport implements Transport {
 
   /** Update heartbeat timestamp for an agent */
   async heartbeat(agentId: string): Promise<void> {
+    FileTransport.validateAgentId(agentId);
     const filePath = path.join(this.agentsDir, `${agentId}.json`);
     try {
       const raw = fs.readFileSync(filePath, "utf8");
@@ -220,6 +225,13 @@ export class FileTransport implements Transport {
 
   // --- Internal helpers ---
 
+  /** Reject agent IDs that could escape the data directory */
+  private static validateAgentId(agentId: string): void {
+    if (!/^[\w\-.@]+$/.test(agentId)) {
+      throw new Error(`Invalid agent ID: ${agentId}`);
+    }
+  }
+
   private handleIncomingFile(filePath: string): void {
     try {
       const raw = fs.readFileSync(filePath, "utf8");
@@ -228,8 +240,8 @@ export class FileTransport implements Transport {
       if (callback) {
         callback(event);
       }
-    } catch {
-      // Malformed or partial write — skip
+    } catch (err) {
+      console.error(`[FileTransport] Failed to process ${filePath}:`, err);
     }
   }
 
