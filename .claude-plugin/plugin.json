@@ -1,0 +1,10 @@
+{
+  "name": "claudematrix",
+  "version": "0.1.0",
+  "description": "Inter-instance messaging for Claude Code via Matrix-shaped protocol",
+  "author": {
+    "name": "Shawn Whitney Anderson"
+  },
+  "license": "MIT",
+  "keywords": ["messaging", "matrix", "inter-agent", "communication"]
+}
