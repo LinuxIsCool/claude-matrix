@@ -60,6 +60,7 @@ async function start(): Promise<void> {
     project_dir: projectDir,
     hostname,
     pid: process.pid,
+    claude_pid: process.ppid,
   });
 
   // Start heartbeat
@@ -80,12 +81,16 @@ async function start(): Promise<void> {
 
 async function shutdown(): Promise<void> {
   console.error("[Claude Matrix] Shutting down...");
+  agentRegistry.stopHeartbeat();
   try {
-    agentRegistry.stopHeartbeat();
     await agentRegistry.unregister();
+  } catch (err) {
+    console.error("[Claude Matrix] Failed to unregister:", err);
+  }
+  try {
     await transport.stop();
   } catch (err) {
-    console.error("[Claude Matrix] Shutdown error:", err);
+    console.error("[Claude Matrix] Failed to stop transport:", err);
   }
   process.exit(0);
 }

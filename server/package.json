@@ -7,7 +7,9 @@
     "build": "esbuild src/index.ts --bundle --platform=node --target=node20 --format=esm --outfile=build/index.mjs --banner:js='// claude-matrix MCP server — bundled with esbuild'",
     "build:types": "tsc --emitDeclarationOnly",
     "dev": "tsx watch src/index.ts",
-    "start": "node build/index.mjs"
+    "start": "node build/index.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.16.0",
@@ -18,7 +20,8 @@
     "@types/node": "^22.15.0",
     "esbuild": "^0.27.3",
     "tsx": "^4.19.4",
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "vitest": "^4.0.18"
   },
   "engines": {
     "node": ">=20.0.0"

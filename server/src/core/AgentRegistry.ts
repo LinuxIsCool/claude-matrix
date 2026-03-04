@@ -41,8 +41,8 @@ export class AgentRegistry {
     this.heartbeatTimer = setInterval(async () => {
       try {
         await this.transport.heartbeat(this.selfAgentId);
-      } catch {
-        // Non-fatal — heartbeat failure just means we'll appear stale
+      } catch (err) {
+        console.error("[AgentRegistry] Heartbeat failed:", err);
       }
     }, AGENT_HEARTBEAT_INTERVAL_MS);
 

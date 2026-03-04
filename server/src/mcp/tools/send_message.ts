@@ -17,7 +17,7 @@ export function registerSendMessage(
       inputSchema: {
         to: z
           .string()
-          .describe("Agent ID of the recipient (from list_agents)"),
+          .describe("Agent ID of the recipient (e.g. 'pid-12345@hostname'). Use list_agents to see available IDs."),
         message: z.string().describe("Message text to send"),
       },
     },
