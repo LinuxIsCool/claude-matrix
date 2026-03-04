@@ -5,8 +5,8 @@ See @README.md for full project documentation.
 ## Quick Reference
 
 - **Language**: TypeScript (server), ESM JavaScript (hooks)
-- **Build**: `cd server && npm run build`
-- **Test server**: `timeout 3 node server/build/index.js 2>&1 || true`
+- **Build**: `cd server && npm run build` (esbuild bundle → `build/index.mjs`)
+- **Test server**: `timeout 3 node server/build/index.mjs 2>&1 || true`
 - **Test hooks**: `echo '{"session_id":"abc12345-abcd-1234-abcd-123456789abc"}' | node scripts/on-session-start.js`
 
 ## Key Conventions

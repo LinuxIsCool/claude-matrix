@@ -17,19 +17,16 @@ Inter-instance messaging plugin for Claude Code. Lets multiple Claude Code sessi
 ## Installation
 
 ```bash
-# Clone into your plugins directory
-cd ~/.claude/plugins
-git clone https://github.com/LinuxIsCool/claude-matrix.git claude-matrix
-
-# Install server dependencies
-cd claude-matrix/server
-npm install
+claude plugin marketplace add LinuxIsCool/claude-matrix
+claude plugin install claude-matrix@claude-matrix
 ```
 
-The TypeScript server ships pre-compiled in `server/build/`. If you need to rebuild:
+The MCP server ships as a single bundled file (`server/build/index.mjs`) — no `npm install` needed.
+
+To rebuild from source:
 
 ```bash
-cd server && npm run build
+cd server && npm install && npm run build
 ```
 
 ## Slash Commands
