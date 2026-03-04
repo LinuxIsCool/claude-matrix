@@ -23,6 +23,7 @@ function makeRegistration(
     project_dir: `/tmp/${agentId}`,
     hostname: os.hostname(),
     pid: process.pid,
+    claude_pid: process.ppid,
     ...overrides,
   };
 }

@@ -12,9 +12,12 @@ import { hostname } from "node:os";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
+/** Agent ID validation regex — must match FileTransport.validateAgentId */
+const AGENT_ID_RE = /^[\w\-.@]+$/;
+
 /**
- * Derive agent ID from session ID (legacy fallback).
- * Only matches if the MCP server also had access to the session ID.
+ * Derive agent ID from session ID (fallback when PID discovery fails).
+ * Produces a consistent ID only if the MCP server also derived from the same session ID.
  */
 export function deriveAgentId(sessionId) {
   const host = hostname();
@@ -79,7 +82,8 @@ export function discoverAgentId(dataDir, readStatus = defaultReadStatus) {
   for (const file of files) {
     try {
       const record = JSON.parse(readFileSync(join(agentsDir, file), "utf8"));
-      if (record.claude_pid === claudePid) {
+      if (typeof record.claude_pid === "number" && record.claude_pid === claudePid) {
+        if (!AGENT_ID_RE.test(record.agent_id)) continue;
         return record.agent_id;
       }
     } catch {

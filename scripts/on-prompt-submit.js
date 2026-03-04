@@ -54,6 +54,9 @@ async function main() {
       const ago = Math.round((Date.now() - s.received_at) / 1000);
       return `  - ${s.from_agent} (${s.from_project_dir}): "${s.preview}" (${ago}s ago)`;
     });
+  if (notif.summaries.length > 5) {
+    lines.push(`  ... and ${notif.summaries.length - 5} more`);
+  }
 
   const context = [
     `[Claude Matrix] ${notif.unread_count} unread message(s):`,
@@ -71,4 +74,7 @@ async function main() {
   process.stdout.write(JSON.stringify(output));
 }
 
-main().catch(() => process.exit(0));
+main().catch((err) => {
+  console.error("[claude-matrix] on-prompt-submit error:", err);
+  process.exit(0);
+});

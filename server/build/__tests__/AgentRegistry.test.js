@@ -33,6 +33,7 @@ describe("AgentRegistry", () => {
             project_dir: "/project",
             hostname: "host",
             pid: 1234,
+            claude_pid: 1233,
         };
         await registry.register(reg);
         expect(transport.registered).toHaveLength(1);

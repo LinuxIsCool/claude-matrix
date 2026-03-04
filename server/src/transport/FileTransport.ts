@@ -77,7 +77,7 @@ export class FileTransport implements Transport {
   }
 
   async send(event: MatrixEvent): Promise<void> {
-    // Derive recipient from room_id convention: "!{sorted_ids}:local"
+    // Derive recipient from room_id convention: "!{id_a}|{id_b}:local"
     const recipientId = this.extractRecipient(event);
     if (!recipientId) {
       throw new Error(`Cannot determine recipient from room_id: ${event.room_id}`);
@@ -120,8 +120,10 @@ export class FileTransport implements Transport {
     const filePath = path.join(this.agentsDir, `${agentId}.json`);
     try {
       fs.unlinkSync(filePath);
-    } catch {
-      // Already gone — idempotent
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+        console.error(`[FileTransport] Failed to unregister agent ${agentId}:`, err);
+      }
     }
   }
 
@@ -131,7 +133,8 @@ export class FileTransport implements Transport {
     let files: string[];
     try {
       files = fs.readdirSync(this.agentsDir).filter((f) => f.endsWith(".json"));
-    } catch {
+    } catch (err) {
+      console.error("[FileTransport] Failed to read agents directory:", err);
       return agents;
     }
 
@@ -145,7 +148,11 @@ export class FileTransport implements Transport {
         // Check PID liveness (only valid on same host)
         if (record.hostname === os.hostname()) {
           if (!this.isPidAlive(record.pid)) {
-            fs.unlinkSync(filePath);
+            try {
+              fs.unlinkSync(filePath);
+            } catch (unlinkErr) {
+              console.error(`[FileTransport] Failed to clean up stale agent ${file}:`, unlinkErr);
+            }
             continue;
           }
         }
@@ -159,8 +166,8 @@ export class FileTransport implements Transport {
         }
 
         agents.push(record);
-      } catch {
-        // Malformed or race condition — skip
+      } catch (err) {
+        console.error(`[FileTransport] Skipping agent file ${file}:`, err);
       }
     }
 
@@ -180,7 +187,10 @@ export class FileTransport implements Transport {
         .readdirSync(inboxDir)
         .filter((f) => f.endsWith(".json") && !f.startsWith(".tmp-"))
         .sort();
-    } catch {
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+        console.error(`[FileTransport] Failed to read inbox for ${agentId}:`, err);
+      }
       return [];
     }
 
@@ -194,8 +204,8 @@ export class FileTransport implements Transport {
         if (filter?.from_agent && event.sender !== filter.from_agent) continue;
 
         messages.push(event);
-      } catch {
-        // Skip malformed
+      } catch (err) {
+        console.error(`[FileTransport] Skipping unreadable message ${file}:`, err);
       }
     }
 
@@ -221,8 +231,8 @@ export class FileTransport implements Transport {
       record.last_heartbeat = Date.now();
       record.status = "online";
       this.writeAtomic(filePath, JSON.stringify(record, null, 2));
-    } catch {
-      // Agent file missing or corrupt — will be re-registered
+    } catch (err) {
+      console.error(`[FileTransport] Heartbeat failed for ${agentId}:`, err);
     }
   }
 

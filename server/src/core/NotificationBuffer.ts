@@ -73,11 +73,15 @@ export class NotificationBuffer {
       fs.mkdirSync(this.notificationsDir, { recursive: true });
       fs.writeFileSync(tempPath, JSON.stringify(file, null, 2), "utf8");
       fs.renameSync(tempPath, filePath);
-    } catch {
+    } catch (err) {
+      console.error(
+        `[NotificationBuffer] Failed to write notification file for ${this.selfAgentId}:`,
+        err,
+      );
       try {
         fs.unlinkSync(tempPath);
       } catch {
-        // Ignore
+        // Cleanup failure is secondary
       }
     }
   }

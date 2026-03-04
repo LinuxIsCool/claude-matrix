@@ -19,7 +19,7 @@ export interface AgentRegistration {
   project_dir: string;
   hostname: string;
   pid: number;
-  claude_pid?: number;
+  claude_pid: number;
 }
 
 /** Agent is stale if no heartbeat for this many ms (90s = 3x 30s heartbeat) */

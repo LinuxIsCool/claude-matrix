@@ -14693,7 +14693,10 @@ var FileTransport = class _FileTransport {
     const filePath = path.join(this.agentsDir, `${agentId2}.json`);
     try {
       fs.unlinkSync(filePath);
-    } catch {
+    } catch (err) {
+      if (err.code !== "ENOENT") {
+        console.error(`[FileTransport] Failed to unregister agent ${agentId2}:`, err);
+      }
     }
   }
   async discoverAgents() {
@@ -14701,7 +14704,8 @@ var FileTransport = class _FileTransport {
     let files;
     try {
       files = fs.readdirSync(this.agentsDir).filter((f) => f.endsWith(".json"));
-    } catch {
+    } catch (err) {
+      console.error("[FileTransport] Failed to read agents directory:", err);
       return agents;
     }
     const now = Date.now();
@@ -14712,7 +14716,11 @@ var FileTransport = class _FileTransport {
         const record2 = JSON.parse(raw);
         if (record2.hostname === os.hostname()) {
           if (!this.isPidAlive(record2.pid)) {
-            fs.unlinkSync(filePath);
+            try {
+              fs.unlinkSync(filePath);
+            } catch (unlinkErr) {
+              console.error(`[FileTransport] Failed to clean up stale agent ${file}:`, unlinkErr);
+            }
             continue;
           }
         }
@@ -14723,7 +14731,8 @@ var FileTransport = class _FileTransport {
           record2.status = "online";
         }
         agents.push(record2);
-      } catch {
+      } catch (err) {
+        console.error(`[FileTransport] Skipping agent file ${file}:`, err);
       }
     }
     return agents;
@@ -14734,7 +14743,10 @@ var FileTransport = class _FileTransport {
     let files;
     try {
       files = fs.readdirSync(inboxDir).filter((f) => f.endsWith(".json") && !f.startsWith(".tmp-")).sort();
-    } catch {
+    } catch (err) {
+      if (err.code !== "ENOENT") {
+        console.error(`[FileTransport] Failed to read inbox for ${agentId2}:`, err);
+      }
       return [];
     }
     const messages = [];
@@ -14745,7 +14757,8 @@ var FileTransport = class _FileTransport {
         if (filter?.since_ts && event.origin_server_ts < filter.since_ts) continue;
         if (filter?.from_agent && event.sender !== filter.from_agent) continue;
         messages.push(event);
-      } catch {
+      } catch (err) {
+        console.error(`[FileTransport] Skipping unreadable message ${file}:`, err);
       }
     }
     const limit = filter?.limit ?? 50;
@@ -14767,7 +14780,8 @@ var FileTransport = class _FileTransport {
       record2.last_heartbeat = Date.now();
       record2.status = "online";
       this.writeAtomic(filePath, JSON.stringify(record2, null, 2));
-    } catch {
+    } catch (err) {
+      console.error(`[FileTransport] Heartbeat failed for ${agentId2}:`, err);
     }
   }
   // --- Internal helpers ---
@@ -14860,7 +14874,8 @@ var AgentRegistry = class {
     this.heartbeatTimer = setInterval(async () => {
       try {
         await this.transport.heartbeat(this.selfAgentId);
-      } catch {
+      } catch (err) {
+        console.error("[AgentRegistry] Heartbeat failed:", err);
       }
     }, AGENT_HEARTBEAT_INTERVAL_MS);
     this.heartbeatTimer.unref();
@@ -14976,7 +14991,11 @@ var NotificationBuffer = class {
       fs2.mkdirSync(this.notificationsDir, { recursive: true });
       fs2.writeFileSync(tempPath, JSON.stringify(file, null, 2), "utf8");
       fs2.renameSync(tempPath, filePath);
-    } catch {
+    } catch (err) {
+      console.error(
+        `[NotificationBuffer] Failed to write notification file for ${this.selfAgentId}:`,
+        err
+      );
       try {
         fs2.unlinkSync(tempPath);
       } catch {
@@ -23291,12 +23310,16 @@ async function start() {
 }
 async function shutdown() {
   console.error("[Claude Matrix] Shutting down...");
+  agentRegistry.stopHeartbeat();
   try {
-    agentRegistry.stopHeartbeat();
     await agentRegistry.unregister();
+  } catch (err) {
+    console.error("[Claude Matrix] Failed to unregister:", err);
+  }
+  try {
     await transport.stop();
   } catch (err) {
-    console.error("[Claude Matrix] Shutdown error:", err);
+    console.error("[Claude Matrix] Failed to stop transport:", err);
   }
   process.exit(0);
 }

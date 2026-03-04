@@ -133,4 +133,7 @@ async function main() {
   process.stdout.write(JSON.stringify(output));
 }
 
-main().catch(() => process.exit(0));
+main().catch((err) => {
+  console.error("[claude-matrix] on-session-start error:", err);
+  process.exit(0);
+});
