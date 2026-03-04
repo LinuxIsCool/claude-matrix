@@ -1,0 +1,5 @@
+{
+  "name": "claude-matrix",
+  "owner": { "name": "LinuxIsCool" },
+  "plugins": [{ "name": "claude-matrix", "source": "./" }]
+}
