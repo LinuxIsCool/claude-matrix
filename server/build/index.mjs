@@ -14635,6 +14635,7 @@ var FileTransport = class _FileTransport {
       ignoreInitial: true,
       depth: 0,
       ignored: (filePath) => {
+        if (filePath === inboxDir) return false;
         const base = path.basename(filePath);
         return base.startsWith(".tmp-") || !base.endsWith(".json");
       }
@@ -14675,6 +14676,7 @@ var FileTransport = class _FileTransport {
       session_id: agent.session_id,
       hostname: agent.hostname,
       pid: agent.pid,
+      claude_pid: agent.claude_pid,
       project_dir: agent.project_dir,
       display_name: path.basename(agent.project_dir),
       registered_at: Date.now(),
@@ -23077,7 +23079,7 @@ function registerSendMessage(server, store, registry2) {
       title: "Send Message",
       description: "Send a message to another Claude Code agent on this machine",
       inputSchema: {
-        to: external_exports.string().describe("Agent ID of the recipient (from list_agents)"),
+        to: external_exports.string().describe("Agent ID of the recipient (e.g. 'pid-12345@hostname'). Use list_agents to see available IDs."),
         message: external_exports.string().describe("Message text to send")
       }
     },
@@ -23276,7 +23278,8 @@ async function start() {
     session_id: sessionId ?? `pid-${process.pid}`,
     project_dir: projectDir,
     hostname: hostname4,
-    pid: process.pid
+    pid: process.pid,
+    claude_pid: process.ppid
   });
   agentRegistry.startHeartbeat();
   notificationBuffer.writeNotificationFile();

@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 
 /**
- * SessionStart hook: extract session_id, persist it to CLAUDE_ENV_FILE,
+ * SessionStart hook: discover agent identity, persist it to CLAUDE_ENV_FILE,
  * and inject identity context into Claude.
+ *
+ * Agent ID resolution:
+ *   1. discoverAgentId() — match claude_pid from /proc ancestry against agent registrations
+ *   2. deriveAgentId(sessionId) — legacy fallback using session ID
  *
  * Stdin: JSON blob with session_id, cwd, hook_event_name, etc.
  * Stdout: JSON with hookSpecificOutput.additionalContext
@@ -11,12 +15,16 @@
 import { readFileSync, mkdirSync, readdirSync, appendFileSync } from "node:fs";
 import { join, basename } from "node:path";
 import { hostname, homedir } from "node:os";
-import { deriveAgentId } from "./lib/agent-id.js";
+import { deriveAgentId, discoverAgentId } from "./lib/agent-id.js";
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 async function main() {
   let input;
   try {
-    input = JSON.parse(readFileSync("/dev/stdin", "utf8"));
+    input = JSON.parse(readFileSync(0, "utf8"));
   } catch {
     process.exit(0);
   }
@@ -26,8 +34,12 @@ async function main() {
     process.exit(0);
   }
 
-  // Persist session ID for later hooks
+  const host = hostname();
+  const projectDir = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+  const dataDir = process.env.CLAUDEMATRIX_DATA_DIR || join(homedir(), ".claude", "local", "claudematrix");
   const envFile = process.env.CLAUDE_ENV_FILE;
+
+  // Persist session ID for later hooks
   if (envFile) {
     try {
       appendFileSync(envFile, `export CLAUDEMATRIX_SESSION_ID='${sessionId}'\n`);
@@ -36,11 +48,24 @@ async function main() {
     }
   }
 
-  // Build context message
-  const host = hostname();
-  const agentId = deriveAgentId(sessionId);
-  const projectDir = process.env.CLAUDE_PROJECT_DIR || process.cwd();
-  const dataDir = process.env.CLAUDEMATRIX_DATA_DIR || join(homedir(), ".claude", "local", "claudematrix");
+  // Discover agent ID: try discovery with 1s retry (MCP server may still be starting)
+  let agentId = discoverAgentId(dataDir);
+  if (!agentId) {
+    await sleep(1000);
+    agentId = discoverAgentId(dataDir);
+  }
+  if (!agentId) {
+    agentId = deriveAgentId(sessionId);
+  }
+
+  // Persist discovered agent ID for subsequent hooks
+  if (envFile) {
+    try {
+      appendFileSync(envFile, `export CLAUDEMATRIX_AGENT_ID='${agentId}'\n`);
+    } catch {
+      // Non-fatal
+    }
+  }
 
   let contextParts = [
     `[Claude Matrix] You are agent: ${agentId}`,

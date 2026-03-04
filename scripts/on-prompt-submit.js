@@ -5,34 +5,35 @@
  * Reads the notification file written by the MCP server's NotificationBuffer.
  * Must be fast (< 5s timeout) — just a file read.
  *
- * Stdin: JSON with session_id, prompt, etc.
+ * Agent ID resolution:
+ *   1. CLAUDEMATRIX_AGENT_ID env var (set by session-start hook)
+ *   2. discoverAgentId() — match claude_pid from /proc ancestry
+ *   3. deriveAgentId(sessionId) — legacy fallback
+ *
  * Stdout: JSON with hookSpecificOutput.additionalContext (if unread messages exist)
  */
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { deriveAgentId } from "./lib/agent-id.js";
+import { deriveAgentId, discoverAgentId } from "./lib/agent-id.js";
 
 async function main() {
-  const sessionId = process.env.CLAUDEMATRIX_SESSION_ID;
-  if (!sessionId) {
-    // Session ID not yet persisted — first prompt before env was loaded
-    // Try reading from stdin
-    try {
-      const input = JSON.parse(readFileSync("/dev/stdin", "utf8"));
-      if (!input.session_id) process.exit(0);
-      // Can't use stdin session_id reliably here since it's the prompt hook
-      process.exit(0);
-    } catch {
-      process.exit(0);
-    }
-  }
-
-  const agentId = deriveAgentId(sessionId);
   const dataDir =
     process.env.CLAUDEMATRIX_DATA_DIR ||
     join(homedir(), ".claude", "local", "claudematrix");
+
+  // Resolve agent ID: env var → discovery → derive
+  let agentId = process.env.CLAUDEMATRIX_AGENT_ID;
+  if (!agentId) {
+    agentId = discoverAgentId(dataDir);
+  }
+  if (!agentId) {
+    const sessionId = process.env.CLAUDEMATRIX_SESSION_ID;
+    if (!sessionId) process.exit(0);
+    agentId = deriveAgentId(sessionId);
+  }
+
   const notifFile = join(dataDir, "notifications", `${agentId}.json`);
 
   let notif;

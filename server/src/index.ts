@@ -60,6 +60,7 @@ async function start(): Promise<void> {
     project_dir: projectDir,
     hostname,
     pid: process.pid,
+    claude_pid: process.ppid,
   });
 
   // Start heartbeat

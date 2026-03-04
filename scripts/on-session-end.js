@@ -3,22 +3,32 @@
 /**
  * SessionEnd hook: clean up agent registration and inbox.
  * Removes agent file, notification file, and inbox messages.
+ *
+ * Agent ID resolution:
+ *   1. CLAUDEMATRIX_AGENT_ID env var (set by session-start hook)
+ *   2. discoverAgentId() — match claude_pid from /proc ancestry
+ *   3. deriveAgentId(sessionId) — legacy fallback
  */
 
 import { unlinkSync, readdirSync, rmdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { deriveAgentId } from "./lib/agent-id.js";
+import { deriveAgentId, discoverAgentId } from "./lib/agent-id.js";
 
-const sessionId = process.env.CLAUDEMATRIX_SESSION_ID;
-if (!sessionId) {
-  process.exit(0);
-}
-
-const agentId = deriveAgentId(sessionId);
 const dataDir =
   process.env.CLAUDEMATRIX_DATA_DIR ||
   join(homedir(), ".claude", "local", "claudematrix");
+
+// Resolve agent ID: env var → discovery → derive
+let agentId = process.env.CLAUDEMATRIX_AGENT_ID;
+if (!agentId) {
+  agentId = discoverAgentId(dataDir);
+}
+if (!agentId) {
+  const sessionId = process.env.CLAUDEMATRIX_SESSION_ID;
+  if (!sessionId) process.exit(0);
+  agentId = deriveAgentId(sessionId);
+}
 
 // Remove agent registration
 try {

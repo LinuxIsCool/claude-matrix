@@ -50,6 +50,8 @@ export class FileTransport implements Transport {
       ignoreInitial: true,
       depth: 0,
       ignored: (filePath: string) => {
+        // Don't ignore the watched directory itself
+        if (filePath === inboxDir) return false;
         const base = path.basename(filePath);
         return base.startsWith(".tmp-") || !base.endsWith(".json");
       },
@@ -99,6 +101,7 @@ export class FileTransport implements Transport {
       session_id: agent.session_id,
       hostname: agent.hostname,
       pid: agent.pid,
+      claude_pid: agent.claude_pid,
       project_dir: agent.project_dir,
       display_name: path.basename(agent.project_dir),
       registered_at: Date.now(),
