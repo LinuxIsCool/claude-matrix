@@ -23259,8 +23259,20 @@ ${formatted.join("\n")}`
 // src/mcp/server.ts
 function createMcpServer(deps) {
   const server = new McpServer(
-    { name: "claude-matrix", version: "0.1.0" },
-    { capabilities: { logging: {} } }
+    { name: "claude-matrix", version: "0.2.0" },
+    {
+      capabilities: {
+        logging: {},
+        experimental: { "claude/channel": {} }
+      },
+      instructions: [
+        "Inter-agent messages from other Claude Code sessions on this machine",
+        'arrive as <channel source="claude-matrix" sender="..." sender_display="..." event_id="...">.',
+        "Read them and respond naturally.",
+        "To reply, use the send_message tool with the sender value as the recipient agent_id.",
+        "To see all online agents, use the list_agents tool."
+      ].join(" ")
+    }
   );
   registerSendMessage(server, deps.messageStore, deps.agentRegistry);
   registerReadMessages(server, deps.messageStore, deps.notificationBuffer);
@@ -23283,6 +23295,27 @@ var notificationBuffer = new NotificationBuffer(
 );
 transport.onMessage(agentId, (event) => {
   notificationBuffer.push(event);
+  if (event.type === "com.claudematrix.message" || event.type === "com.claudematrix.message.notice") {
+    const body = "body" in event.content ? event.content.body : JSON.stringify(event.content);
+    const senderDisplay = event.sender.split("@")[0].replace(/^(session-|pid-)/, "");
+    mcpServer.server.notification({
+      method: "notifications/claude/channel",
+      params: {
+        content: body,
+        meta: {
+          sender: event.sender,
+          sender_display: senderDisplay,
+          sender_project: event["com.claudematrix.project_dir"] ?? "",
+          event_id: event.event_id
+        }
+      }
+    }).catch((err) => {
+      console.error(
+        "[Claude Matrix] Channel notification failed:",
+        err
+      );
+    });
+  }
 });
 var mcpServer = createMcpServer({
   agentRegistry,

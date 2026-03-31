@@ -15,8 +15,20 @@ export interface McpDependencies {
 
 export function createMcpServer(deps: McpDependencies): McpServer {
   const server = new McpServer(
-    { name: "claude-matrix", version: "0.1.0" },
-    { capabilities: { logging: {} } },
+    { name: "claude-matrix", version: "0.2.0" },
+    {
+      capabilities: {
+        logging: {},
+        experimental: { "claude/channel": {} },
+      },
+      instructions: [
+        "Inter-agent messages from other Claude Code sessions on this machine",
+        'arrive as <channel source="claude-matrix" sender="..." sender_display="..." event_id="...">.',
+        "Read them and respond naturally.",
+        "To reply, use the send_message tool with the sender value as the recipient agent_id.",
+        "To see all online agents, use the list_agents tool.",
+      ].join(" "),
+    },
   );
 
   registerSendMessage(server, deps.messageStore, deps.agentRegistry);

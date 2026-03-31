@@ -35,9 +35,46 @@ const notificationBuffer = new NotificationBuffer(
   agentId,
 );
 
-// Wire incoming messages to the notification buffer
+// Wire incoming messages to the notification buffer AND channel push
 transport.onMessage(agentId, (event) => {
+  // Existing: update notification buffer for hook-based fallback
   notificationBuffer.push(event);
+
+  // Channel push: emit real-time notification for sessions with --channels
+  if (
+    event.type === "com.claudematrix.message" ||
+    event.type === "com.claudematrix.message.notice"
+  ) {
+    const body =
+      "body" in event.content
+        ? (event.content as { body: string }).body
+        : JSON.stringify(event.content);
+    const senderDisplay = event.sender
+      .split("@")[0]
+      .replace(/^(session-|pid-)/, "");
+
+    mcpServer.server
+      .notification({
+        method: "notifications/claude/channel",
+        params: {
+          content: body,
+          meta: {
+            sender: event.sender,
+            sender_display: senderDisplay,
+            sender_project:
+              event["com.claudematrix.project_dir"] ?? "",
+            event_id: event.event_id,
+          },
+        },
+      })
+      .catch((err: unknown) => {
+        // Non-fatal: channel may not be active (no --channels flag)
+        console.error(
+          "[Claude Matrix] Channel notification failed:",
+          err,
+        );
+      });
+  }
 });
 
 const mcpServer = createMcpServer({
