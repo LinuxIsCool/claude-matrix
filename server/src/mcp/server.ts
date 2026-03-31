@@ -23,9 +23,10 @@ export function createMcpServer(deps: McpDependencies): McpServer {
       },
       instructions: [
         "Inter-agent messages from other Claude Code sessions on this machine",
-        'arrive as <channel source="claude-matrix" sender="..." sender_display="..." event_id="...">.',
+        "arrive as <channel> tags with sender, sender_display, and event_id attributes.",
+        "The source attribute varies by installation (e.g. plugin:claude-matrix:claude-matrix).",
         "Read them and respond naturally.",
-        "To reply, use the send_message tool with the sender value as the recipient agent_id.",
+        "To reply, use the send_message tool with the sender attribute value as the recipient agent_id.",
         "To see all online agents, use the list_agents tool.",
       ].join(" "),
     },

@@ -28,7 +28,8 @@ export type ClaudeMatrixEventType =
   | "com.claudematrix.message.notice"
   | "com.claudematrix.agent.register"
   | "com.claudematrix.agent.deregister"
-  | "com.claudematrix.agent.heartbeat";
+  | "com.claudematrix.agent.heartbeat"
+  | "m.room.message"; // Standard Matrix type — accepted from external writers (fleet-msg)
 
 export type EventContent =
   | MessageContent
