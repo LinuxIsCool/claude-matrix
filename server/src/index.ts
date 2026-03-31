@@ -41,10 +41,13 @@ transport.onMessage(agentId, (event) => {
   notificationBuffer.push(event);
 
   // Channel push: emit real-time notification for sessions with --channels
-  if (
-    event.type === "com.claudematrix.message" ||
-    event.type === "com.claudematrix.message.notice"
-  ) {
+  // Accept both ClaudeMatrix types and raw Matrix types (from fleet-msg)
+  const eventType = event.type as string;
+  const isMessage =
+    eventType === "com.claudematrix.message" ||
+    eventType === "com.claudematrix.message.notice" ||
+    eventType === "m.room.message";
+  if (isMessage) {
     const body =
       "body" in event.content
         ? (event.content as { body: string }).body

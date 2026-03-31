@@ -23295,7 +23295,9 @@ var notificationBuffer = new NotificationBuffer(
 );
 transport.onMessage(agentId, (event) => {
   notificationBuffer.push(event);
-  if (event.type === "com.claudematrix.message" || event.type === "com.claudematrix.message.notice") {
+  const eventType = event.type;
+  const isMessage = eventType === "com.claudematrix.message" || eventType === "com.claudematrix.message.notice" || eventType === "m.room.message";
+  if (isMessage) {
     const body = "body" in event.content ? event.content.body : JSON.stringify(event.content);
     const senderDisplay = event.sender.split("@")[0].replace(/^(session-|pid-)/, "");
     mcpServer.server.notification({
