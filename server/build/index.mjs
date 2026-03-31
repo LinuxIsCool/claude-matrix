@@ -23293,6 +23293,12 @@ var notificationBuffer = new NotificationBuffer(
   path3.join(dataDir, "notifications"),
   agentId
 );
+var mcpServer = createMcpServer({
+  agentRegistry,
+  messageStore,
+  notificationBuffer,
+  selfAgentId: agentId
+});
 transport.onMessage(agentId, (event) => {
   notificationBuffer.push(event);
   const eventType = event.type;
@@ -23318,12 +23324,6 @@ transport.onMessage(agentId, (event) => {
       );
     });
   }
-});
-var mcpServer = createMcpServer({
-  agentRegistry,
-  messageStore,
-  notificationBuffer,
-  selfAgentId: agentId
 });
 async function start() {
   await transport.start();

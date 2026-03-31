@@ -35,6 +35,13 @@ const notificationBuffer = new NotificationBuffer(
   agentId,
 );
 
+const mcpServer = createMcpServer({
+  agentRegistry,
+  messageStore,
+  notificationBuffer,
+  selfAgentId: agentId,
+});
+
 // Wire incoming messages to the notification buffer AND channel push
 transport.onMessage(agentId, (event) => {
   // Existing: update notification buffer for hook-based fallback
@@ -78,13 +85,6 @@ transport.onMessage(agentId, (event) => {
         );
       });
   }
-});
-
-const mcpServer = createMcpServer({
-  agentRegistry,
-  messageStore,
-  notificationBuffer,
-  selfAgentId: agentId,
 });
 
 // --- Lifecycle ---
