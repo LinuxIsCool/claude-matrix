@@ -53,6 +53,24 @@ transport.onMessage(agentId, (event) => {
     event.type === "com.claudematrix.message.notice" ||
     event.type === "m.room.message";
   if (isMessage) {
+    // Rhythm routing: only deliver rhythm messages to the orchestrator
+    const isRhythm = event.sender?.startsWith("rhythm-") ?? false;
+    if (isRhythm) {
+      try {
+        const fs = require("fs");
+        const path = require("path");
+        const os = require("os");
+        const roleFile = path.join(os.homedir(), ".claude", "local", "roles", "orchestrator.json");
+        const role = JSON.parse(fs.readFileSync(roleFile, "utf-8"));
+        const myPaneId = process.env.TMUX_PANE || "";
+        if (role.pane_id && myPaneId && role.pane_id !== myPaneId) {
+          // Not the orchestrator — suppress rhythm channel push (still in notification buffer)
+          return;
+        }
+      } catch {
+        // No role file or parse error — deliver to everyone (backward compatible)
+      }
+    }
     const body =
       "body" in event.content
         ? (event.content as { body: string }).body

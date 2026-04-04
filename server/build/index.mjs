@@ -5,7 +5,13 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
-var __commonJS = (cb, mod) => function __require() {
+var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
+  get: (a, b) => (typeof require !== "undefined" ? require : a)[b]
+}) : x)(function(x) {
+  if (typeof require !== "undefined") return require.apply(this, arguments);
+  throw Error('Dynamic require of "' + x + '" is not supported');
+});
+var __commonJS = (cb, mod) => function __require2() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
 var __export = (target, all) => {
@@ -23304,6 +23310,21 @@ transport.onMessage(agentId, (event) => {
   notificationBuffer.push(event);
   const isMessage = event.type === "com.claudematrix.message" || event.type === "com.claudematrix.message.notice" || event.type === "m.room.message";
   if (isMessage) {
+    const isRhythm = event.sender?.startsWith("rhythm-") ?? false;
+    if (isRhythm) {
+      try {
+        const fs3 = __require("fs");
+        const path4 = __require("path");
+        const os3 = __require("os");
+        const roleFile = path4.join(os3.homedir(), ".claude", "local", "roles", "orchestrator.json");
+        const role = JSON.parse(fs3.readFileSync(roleFile, "utf-8"));
+        const myPaneId = process.env.TMUX_PANE || "";
+        if (role.pane_id && myPaneId && role.pane_id !== myPaneId) {
+          return;
+        }
+      } catch {
+      }
+    }
     const body = "body" in event.content ? event.content.body : JSON.stringify(event.content);
     const senderDisplay = event.sender.split("@")[0].replace(/^(session-|pid-)/, "");
     mcpServer.server.notification({
