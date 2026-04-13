@@ -7,15 +7,7 @@
   },
   "license": "MIT",
   "keywords": ["messaging", "matrix", "inter-agent", "communication"],
-  "mcpServers": {
-    "claude-matrix": {
-      "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/server/build/index.mjs"],
-      "env": {
-        "CLAUDEMATRIX_DATA_DIR": "${HOME}/.claude/local/claudematrix"
-      }
-    }
-  },
+  "mcpServers": "./.mcp.json",
   "hooks": {
     "SessionStart": [
       {
