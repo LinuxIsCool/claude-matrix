@@ -12,7 +12,7 @@
  * Stdout: JSON with hookSpecificOutput.additionalContext
  */
 
-import { readFileSync, mkdirSync, readdirSync, appendFileSync, unlinkSync, rmdirSync } from "node:fs";
+import { readFileSync, mkdirSync, readdirSync, appendFileSync, unlinkSync, rmSync } from "node:fs";
 import { join, basename } from "node:path";
 import { hostname, homedir } from "node:os";
 import { deriveAgentId, discoverAgentId } from "./lib/agent-id.js";
@@ -26,7 +26,7 @@ function sleep(ms) {
  * notification files for agents whose heartbeat is older than maxStaleAgeMs.
  * Runs on every SessionStart; lightweight (readdir + stat, no network).
  */
-function reapStaleAgents(dataDir, maxStaleAgeMs = 24 * 60 * 60 * 1000) {
+function reapStaleAgents(dataDir, selfAgentId, maxStaleAgeMs = 24 * 60 * 60 * 1000) {
   const agentsDir = join(dataDir, "agents");
   try {
     const now = Date.now();
@@ -35,6 +35,10 @@ function reapStaleAgents(dataDir, maxStaleAgeMs = 24 * 60 * 60 * 1000) {
     for (const file of files) {
       try {
         const data = JSON.parse(readFileSync(join(agentsDir, file), "utf8"));
+
+        // Never reap our own registration
+        if (data.agent_id === selfAgentId) continue;
+
         const age = now - (data.last_heartbeat || 0);
         if (age <= maxStaleAgeMs) continue;
 
@@ -46,19 +50,16 @@ function reapStaleAgents(dataDir, maxStaleAgeMs = 24 * 60 * 60 * 1000) {
         // Remove notification file
         try { unlinkSync(join(dataDir, "notifications", `${staleId}.json`)); } catch {}
 
-        // Remove inbox directory
-        try {
-          const inboxDir = join(dataDir, "messages", staleId);
-          for (const msg of readdirSync(inboxDir)) {
-            try { unlinkSync(join(inboxDir, msg)); } catch {}
-          }
-          rmdirSync(inboxDir);
-        } catch {}
+        // Remove inbox directory (recursive for future-proofing)
+        try { rmSync(join(dataDir, "messages", staleId), { recursive: true, force: true }); } catch {}
 
         reaped++;
       } catch {
-        // Corrupted file — remove it
-        try { unlinkSync(join(agentsDir, file)); reaped++; } catch {}
+        // Corrupted file — remove it, but never our own
+        const fileId = file.replace(/\.json$/, "");
+        if (fileId !== selfAgentId) {
+          try { unlinkSync(join(agentsDir, file)); reaped++; } catch {}
+        }
       }
     }
     return reaped;
@@ -118,10 +119,10 @@ async function main() {
     `Project: ${projectDir}`,
   ];
 
-  // Reap stale agents before discovery
+  // Reap stale agents (after identity resolution so we can skip self)
   const agentsDir = join(dataDir, "agents");
   mkdirSync(agentsDir, { recursive: true });
-  const reaped = reapStaleAgents(dataDir);
+  const reaped = reapStaleAgents(dataDir, agentId);
   if (reaped > 0) {
     contextParts.push(`(cleaned ${reaped} stale agent registration${reaped > 1 ? "s" : ""})`);
   }
