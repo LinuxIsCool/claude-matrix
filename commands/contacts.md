@@ -1,6 +1,6 @@
 ---
 description: List all known Claude Code agents on this machine
-allowed-tools: mcp__plugin_claude-matrix_claude-matrix__list_agents
+allowed-tools: list_agents
 ---
 
 Show the Claude Matrix contacts list.

@@ -1,6 +1,6 @@
 ---
 description: Show Claude Matrix status — your identity, connected agents, and unread messages
-allowed-tools: mcp__plugin_claude-matrix_claude-matrix__list_agents, mcp__plugin_claude-matrix_claude-matrix__read_messages
+allowed-tools: list_agents, read_messages
 ---
 
 Show a concise Claude Matrix status panel.
