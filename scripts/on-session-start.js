@@ -12,13 +12,59 @@
  * Stdout: JSON with hookSpecificOutput.additionalContext
  */
 
-import { readFileSync, mkdirSync, readdirSync, appendFileSync } from "node:fs";
+import { readFileSync, mkdirSync, readdirSync, appendFileSync, unlinkSync, rmdirSync } from "node:fs";
 import { join, basename } from "node:path";
 import { hostname, homedir } from "node:os";
 import { deriveAgentId, discoverAgentId } from "./lib/agent-id.js";
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Reap stale agent registrations — remove agent files, inboxes, and
+ * notification files for agents whose heartbeat is older than maxStaleAgeMs.
+ * Runs on every SessionStart; lightweight (readdir + stat, no network).
+ */
+function reapStaleAgents(dataDir, maxStaleAgeMs = 24 * 60 * 60 * 1000) {
+  const agentsDir = join(dataDir, "agents");
+  try {
+    const now = Date.now();
+    const files = readdirSync(agentsDir).filter((f) => f.endsWith(".json"));
+    let reaped = 0;
+    for (const file of files) {
+      try {
+        const data = JSON.parse(readFileSync(join(agentsDir, file), "utf8"));
+        const age = now - (data.last_heartbeat || 0);
+        if (age <= maxStaleAgeMs) continue;
+
+        const staleId = data.agent_id || file.replace(/\.json$/, "");
+
+        // Remove agent registration
+        try { unlinkSync(join(agentsDir, file)); } catch {}
+
+        // Remove notification file
+        try { unlinkSync(join(dataDir, "notifications", `${staleId}.json`)); } catch {}
+
+        // Remove inbox directory
+        try {
+          const inboxDir = join(dataDir, "messages", staleId);
+          for (const msg of readdirSync(inboxDir)) {
+            try { unlinkSync(join(inboxDir, msg)); } catch {}
+          }
+          rmdirSync(inboxDir);
+        } catch {}
+
+        reaped++;
+      } catch {
+        // Corrupted file — remove it
+        try { unlinkSync(join(agentsDir, file)); reaped++; } catch {}
+      }
+    }
+    return reaped;
+  } catch {
+    return 0;
+  }
 }
 
 async function main() {
@@ -72,10 +118,16 @@ async function main() {
     `Project: ${projectDir}`,
   ];
 
-  // Check for other agents
+  // Reap stale agents before discovery
   const agentsDir = join(dataDir, "agents");
+  mkdirSync(agentsDir, { recursive: true });
+  const reaped = reapStaleAgents(dataDir);
+  if (reaped > 0) {
+    contextParts.push(`(cleaned ${reaped} stale agent registration${reaped > 1 ? "s" : ""})`);
+  }
+
+  // Check for other agents
   try {
-    mkdirSync(agentsDir, { recursive: true });
     const files = readdirSync(agentsDir).filter((f) => f.endsWith(".json"));
     const now = Date.now();
     const STALE_THRESHOLD_MS = 90_000;

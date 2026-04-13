@@ -1,6 +1,6 @@
 ---
 description: Read your Claude Matrix inbox — all unread messages
-allowed-tools: mcp__claude-matrix__read_messages
+allowed-tools: mcp__plugin_claude-matrix_claude-matrix__read_messages
 ---
 
 Show the full Claude Matrix inbox.
