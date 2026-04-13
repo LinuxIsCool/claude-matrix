@@ -7,6 +7,7 @@
   },
   "license": "MIT",
   "keywords": ["messaging", "matrix", "inter-agent", "communication"],
+  "agents": ["./agents/operator.md"],
   "mcpServers": "./.mcp.json",
   "hooks": {
     "SessionStart": [

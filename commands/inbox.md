@@ -1,20 +1,10 @@
 ---
 description: Read your Claude Matrix inbox — all unread messages
-allowed-tools: read_messages
+allowed-tools: Agent
 ---
 
 Show the full Claude Matrix inbox.
 
-Call `read_messages` with `limit: 50` to retrieve messages.
+Use the Agent tool to dispatch to the `claude-matrix:operator` agent with this prompt:
 
-Format each message clearly:
-```
-FROM: {sender agent_id}
-PROJECT: {sender's project directory}
-TIME: {how long ago}
-
-{full message body}
----
-```
-
-If no messages, say "Inbox empty — no messages."
+"Call `read_messages` with limit 50 to retrieve all inbox messages. Format each message showing: FROM (agent_id and display_name), PROJECT, TIME (relative), and the full message body. If no messages, say 'Inbox empty — no messages.'"
