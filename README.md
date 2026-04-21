@@ -48,6 +48,45 @@ The plugin provides three MCP tools available to Claude:
 | `read_messages` | Read inbox messages with optional limit filter |
 | `list_agents` | Discover all registered agents (online/stale) |
 
+## Driver vs. non-driver launch template (Phase 0 — current)
+
+**All personas** launch WITH `--dangerously-load-development-channels plugin:claude-matrix@legion-plugins`:
+
+```bash
+claude --dangerously-load-development-channels plugin:claude-matrix@legion-plugins --agent <persona>
+```
+
+The channels flag gives every persona real-time KAIROS push of inbound matrix messages via the
+`notifications/claude/channel` JSON-RPC the claude-matrix MCP server emits. The flag disables
+the native `AskUserQuestion` tool via hard-coded `isEnabled()`, but MCP tools are not filtered
+by that gate — so drivers use
+`mcp__plugin_claude-legion-dialog_claude-legion-dialog__ask_human` from the
+[`claude-legion-dialog`](../claude-legion-dialog/) plugin for interactive popups instead.
+
+| Tool | With channels flag | Without channels flag |
+|------|:--:|:--:|
+| `AskUserQuestion` (native) | ❌ disabled by `isEnabled()` | ✅ available |
+| `mcp__plugin_claude-legion-dialog_claude-legion-dialog__ask_human` | ✅ available | ✅ available |
+| KAIROS channel push (`<channel>` tags in context) | ✅ real-time, inline content | ❌ no push |
+
+Persona YAMLs list **both** tools — Claude Code surfaces whichever is enabled in the current
+launch config. See
+[backlog id 223](../../local/backlog/driver-orchestrator-architecture.md) and
+[Phase 0 plan](../../plans/2026-04-20-driver-v2-phase-0.md) for the decision history.
+
+### Legacy: alarm daemon
+
+`scripts/alarm.mjs` + `claude-matrix-alarm.service` are **retained but disabled**. They were
+the Phase-N-minus-1 workaround that ran flagless drivers with an inotify poke pattern.
+Superseded 2026-04-20 after Spike R1 confirmed the MCP bypass path.
+
+Rollback (if Phase 0 regresses in production):
+
+```bash
+systemctl --user enable --now claude-matrix-alarm.service
+# and restore CLAUDEMATRIX_DRIVER=1 launch for driver personas
+```
+
 ## Architecture
 
 ```
@@ -93,7 +132,9 @@ Core modules (`AgentRegistry`, `MessageStore`, `NotificationBuffer`) depend only
 ~/.claude/local/claudematrix/
 ├── agents/{agent_id}.json           # Agent registration (heartbeat, PID, project)
 ├── messages/{agent_id}/             # Per-agent inbox (one JSON file per message)
-└── notifications/{agent_id}.json    # Notification file for hooks
+├── notifications/{agent_id}.json    # Notification file for hooks
+├── panes/{agent_id}.json            # Driver tmux pane registry (alarm daemon target)
+└── alarm.log                        # Alarm daemon operation log
 ```
 
 ### Agent Identity

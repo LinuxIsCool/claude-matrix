@@ -44,6 +44,13 @@ try {
   // Already gone
 }
 
+// Remove alarm pane registry (driver only — harmless if not present)
+try {
+  unlinkSync(join(dataDir, "panes", `${agentId}.json`));
+} catch {
+  // Already gone or never registered (non-driver)
+}
+
 // Clean up inbox directory
 try {
   const inboxDir = join(dataDir, "messages", agentId);

@@ -12,9 +12,10 @@
  * Stdout: JSON with hookSpecificOutput.additionalContext
  */
 
-import { readFileSync, mkdirSync, readdirSync, appendFileSync, unlinkSync, rmSync } from "node:fs";
+import { readFileSync, mkdirSync, readdirSync, appendFileSync, unlinkSync, rmSync, writeFileSync, renameSync } from "node:fs";
 import { join, basename } from "node:path";
 import { hostname, homedir } from "node:os";
+import { execFileSync } from "node:child_process";
 import { deriveAgentId, discoverAgentId } from "./lib/agent-id.js";
 
 function sleep(ms) {
@@ -118,6 +119,39 @@ async function main() {
     `[Claude Matrix] You are agent: ${agentId}`,
     `Project: ${projectDir}`,
   ];
+
+  // Driver-only: register tmux pane for the alarm daemon.
+  // Opt-in via CLAUDEMATRIX_DRIVER=1 (set by driver launcher). Non-drivers
+  // keep KAIROS channel push and don't need the alarm.
+  if (process.env.CLAUDEMATRIX_DRIVER === "1" && process.env.TMUX_PANE) {
+    try {
+      const panesDir = join(dataDir, "panes");
+      mkdirSync(panesDir, { recursive: true });
+      // Resolve %N pane ID → human target string (session:window.pane)
+      const target = execFileSync(
+        "tmux",
+        ["display-message", "-p", "-t", process.env.TMUX_PANE,
+         "#{session_name}:#{window_index}.#{pane_index}"],
+        { encoding: "utf8", timeout: 2000 }
+      ).trim();
+      if (/^[\w\-.]+:[\w\-.]+(\.\d+)?$/.test(target)) {
+        const regPath = join(panesDir, `${agentId}.json`);
+        const tmp = `${regPath}.tmp`;
+        writeFileSync(tmp, JSON.stringify({
+          pane: target,
+          tmux_pane_id: process.env.TMUX_PANE,
+          pid: process.pid,
+          session_id: sessionId,
+          registered_at: Date.now(),
+        }) + "\n", { mode: 0o600 });
+        renameSync(tmp, regPath);
+        contextParts.push(`[Driver] Alarm pane registered: ${target}`);
+      }
+    } catch {
+      // Non-fatal — without registry the alarm won't poke this session
+      // but Claude Code still runs normally.
+    }
+  }
 
   // Reap stale agents (after identity resolution so we can skip self)
   const agentsDir = join(dataDir, "agents");
