@@ -5,7 +5,7 @@
  *
  * Superseded 2026-04-20 by the `claude-legion-dialog` MCP plugin. Drivers now
  * launch WITH `--dangerously-load-development-channels` (restoring KAIROS
- * channel push) and use `mcp__plugin_claude-legion-dialog_claude-legion-dialog__ask_human`
+ * channel push) and use `mcp__plugin_claude-dialog_ui__ask`
  * for interactive dialogs. The channels flag disables the native
  * `AskUserQuestion` via `isEnabled()`, but MCP tools bypass that gate
  * (validated by Spike R1, 2026-04-20 20:00 PDT).

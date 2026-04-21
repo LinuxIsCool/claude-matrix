@@ -60,13 +60,13 @@ The channels flag gives every persona real-time KAIROS push of inbound matrix me
 `notifications/claude/channel` JSON-RPC the claude-matrix MCP server emits. The flag disables
 the native `AskUserQuestion` tool via hard-coded `isEnabled()`, but MCP tools are not filtered
 by that gate — so drivers use
-`mcp__plugin_claude-legion-dialog_claude-legion-dialog__ask_human` from the
-[`claude-legion-dialog`](../claude-legion-dialog/) plugin for interactive popups instead.
+`mcp__plugin_claude-dialog_ui__ask` from the
+[`claude-dialog`](../claude-dialog/) plugin for interactive popups instead.
 
 | Tool | With channels flag | Without channels flag |
 |------|:--:|:--:|
 | `AskUserQuestion` (native) | ❌ disabled by `isEnabled()` | ✅ available |
-| `mcp__plugin_claude-legion-dialog_claude-legion-dialog__ask_human` | ✅ available | ✅ available |
+| `mcp__plugin_claude-dialog_ui__ask` | ✅ available | ✅ available |
 | KAIROS channel push (`<channel>` tags in context) | ✅ real-time, inline content | ❌ no push |
 
 Persona YAMLs list **both** tools — Claude Code surfaces whichever is enabled in the current
