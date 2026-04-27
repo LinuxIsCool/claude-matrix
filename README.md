@@ -48,31 +48,60 @@ The plugin provides three MCP tools available to Claude:
 | `read_messages` | Read inbox messages with optional limit filter |
 | `list_agents` | Discover all registered agents (online/stale) |
 
-## Driver vs. non-driver launch template (Phase 0 — current)
+## Driver vs. non-driver launch template (updated 2026-04-27)
 
-**All personas** launch WITH `--dangerously-load-development-channels plugin:claude-matrix@legion-plugins`:
+> **Default: channels OFF.** Channels flag is OPT-IN for inter-agent driver/orchestrator
+> scenarios only. Per Shawn directive 2026-04-27 10:42 PDT — preserves built-in
+> `AskUserQuestion` for all interactive personas.
+
+### Default launch (channels OFF — preserves built-in `AskUserQuestion`)
 
 ```bash
-claude --dangerously-load-development-channels plugin:claude-matrix@legion-plugins --agent <persona>
+claude --dangerously-skip-permissions --agent <persona>
 ```
 
-The channels flag gives every persona real-time KAIROS push of inbound matrix messages via the
-`notifications/claude/channel` JSON-RPC the claude-matrix MCP server emits. The flag disables
-the native `AskUserQuestion` tool via hard-coded `isEnabled()`, but MCP tools are not filtered
-by that gate — so drivers use
-`mcp__plugin_claude-dialog_ui__ask` from the
-[`claude-dialog`](../claude-dialog/) plugin for interactive popups instead.
+This is the default for all interactive sessions going forward. `AskUserQuestion`
+works natively. Real-time matrix `<channel>` push is unavailable, but matrix MCP tools
+(`list_agents`, `read_messages`, `send_message`) still work for polling.
 
-| Tool | With channels flag | Without channels flag |
+### Opt-in launch (channels ON — inter-agent driver/worker sessions)
+
+```bash
+claude \
+  --dangerously-skip-permissions \
+  --dangerously-load-development-channels plugin:claude-matrix@legion-plugins \
+  --agent <persona>
+```
+
+Use this form ONLY when real-time `<channel>` tag push from matrix is required —
+typically driver-orchestrator scenarios where one agent needs immediate notification
+of inbound messages from peers without polling.
+
+### Tool availability matrix
+
+| Tool | Channels OFF (default) | Channels ON (opt-in) |
 |------|:--:|:--:|
-| `AskUserQuestion` (native) | ❌ disabled by `isEnabled()` | ✅ available |
+| `AskUserQuestion` (native) | ✅ available | ❌ disabled by `isEnabled()` |
 | `mcp__plugin_claude-dialog_ui__ask` | ✅ available | ✅ available |
-| KAIROS channel push (`<channel>` tags in context) | ✅ real-time, inline content | ❌ no push |
+| KAIROS channel push (`<channel>` tags in context) | ❌ no push (poll via MCP) | ✅ real-time, inline content |
 
-Persona YAMLs list **both** tools — Claude Code surfaces whichever is enabled in the current
-launch config. See
+Persona YAMLs list **both** dialog tools — Claude Code surfaces whichever is enabled
+in the current launch config. See
 [backlog id 223](../../local/backlog/driver-orchestrator-architecture.md) and
 [Phase 0 plan](../../plans/2026-04-20-driver-v2-phase-0.md) for the decision history.
+
+### When to use channels ON
+
+- Driver orchestration (e.g., `matt-driver` autonomous batch).
+- Multi-agent worker pools where workers must react to inbound matrix events
+  without polling latency.
+- Any session whose primary loop is matrix message processing.
+
+### When to use channels OFF (default)
+
+- Interactive sessions with Shawn (need `AskUserQuestion`).
+- Single-agent task execution where matrix peers are not part of the workflow.
+- Any session that may need to dialogue with a human user.
 
 ### Legacy: alarm daemon
 
