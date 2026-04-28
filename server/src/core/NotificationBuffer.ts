@@ -22,9 +22,10 @@ export class NotificationBuffer {
       from_agent: event.sender,
       from_display: event.sender.split("@")[0].replace("session-", ""),
       from_project_dir: event["com.claudematrix.project_dir"] ?? "unknown",
+      // ZERO TRUNCATION: full body. Display layer can ellipsize if needed.
       preview:
         "body" in event.content
-          ? (event.content as { body: string }).body.slice(0, 120)
+          ? (event.content as { body: string }).body
           : "[non-text event]",
       received_at: Date.now(),
       event_id: event.event_id,
