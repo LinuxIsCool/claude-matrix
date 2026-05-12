@@ -1,5 +1,7 @@
 # ClaudeMatrix Development
 
+
+**Agents**: read `AGENTS.md` first. It declares the public surface contract and conventions for working with claude-matrix.
 See @README.md for full project documentation.
 
 ## Quick Reference
