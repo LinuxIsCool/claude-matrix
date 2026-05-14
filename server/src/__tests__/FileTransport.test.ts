@@ -109,6 +109,77 @@ describe("FileTransport", () => {
       const record = JSON.parse(fs.readFileSync(filePath, "utf8"));
       expect(record.claude_pid).toBe(12345);
     });
+
+    // ── Phase 0 of task-490 — persona + focus on AgentRecord ──────────
+
+    it("persists persona slug when supplied", async () => {
+      transport = new FileTransport({ dataDir: tmpDir, agentId: "agent-a@host" });
+      await transport.start();
+      await transport.registerAgent(
+        makeRegistration("agent-a@host", { persona: "matt" }),
+      );
+
+      const filePath = path.join(tmpDir, "agents", "agent-a@host.json");
+      const record = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      expect(record.persona).toBe("matt");
+    });
+
+    it("omits persona when not supplied (registration field absent)", async () => {
+      transport = new FileTransport({ dataDir: tmpDir, agentId: "agent-a@host" });
+      await transport.start();
+      await transport.registerAgent(makeRegistration("agent-a@host"));
+
+      const filePath = path.join(tmpDir, "agents", "agent-a@host.json");
+      const record = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      // `persona` field may be absent or undefined — both indicate anonymous
+      expect(record.persona).toBeUndefined();
+    });
+
+    it("seeds focus field to null on registration", async () => {
+      transport = new FileTransport({ dataDir: tmpDir, agentId: "agent-a@host" });
+      await transport.start();
+      await transport.registerAgent(makeRegistration("agent-a@host"));
+
+      const filePath = path.join(tmpDir, "agents", "agent-a@host.json");
+      const record = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      // Contract: focus is present + null on fresh registration.
+      // `null` (not undefined) so downstream can distinguish
+      // "never set" from "cleared" once the inference pipeline lands
+      // in Phase 4 of task-490.
+      expect("focus" in record).toBe(true);
+      expect(record.focus).toBeNull();
+    });
+
+    it("heartbeat preserves persona + focus fields", async () => {
+      // Critical invariant from task-490 §17: heartbeat read-merge-writes
+      // the record, so persona + focus survive 30s heartbeat cycles.
+      // Without this guarantee, focus would be wiped on every heartbeat.
+      transport = new FileTransport({ dataDir: tmpDir, agentId: "agent-a@host" });
+      await transport.start();
+      await transport.registerAgent(
+        makeRegistration("agent-a@host", { persona: "darren" }),
+      );
+
+      // Simulate Phase 1 set_focus: patch focus into the record on disk
+      const filePath = path.join(tmpDir, "agents", "agent-a@host.json");
+      const recordPre = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      recordPre.focus = {
+        task_id: 490,
+        source: "explicit",
+        started_at: Date.now(),
+      };
+      fs.writeFileSync(filePath, JSON.stringify(recordPre, null, 2));
+
+      // Now invoke heartbeat — must not clobber persona or focus.
+      await transport.heartbeat("agent-a@host");
+
+      const recordPost = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      expect(recordPost.persona).toBe("darren");
+      expect(recordPost.focus).toEqual(recordPre.focus);
+      // last_heartbeat advanced; status still "online".
+      expect(recordPost.last_heartbeat).toBeGreaterThanOrEqual(recordPre.last_heartbeat);
+      expect(recordPost.status).toBe("online");
+    });
   });
 
   describe("discovery", () => {

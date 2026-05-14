@@ -109,7 +109,12 @@ async function start(): Promise<void> {
   // Start transport (creates directories, starts watcher)
   await transport.start();
 
-  // Register this agent
+  // Register this agent. Persona slug (Phase 0 of task-490) is read
+  // from PERSONA_SLUG — exported by the persona launch template, e.g.
+  // `claude --agent matt` sets `PERSONA_SLUG=matt`. When absent the
+  // field is omitted from the registration (downstream defaults to
+  // anonymous / DEFAULT_COLOR).
+  const personaSlug = process.env["PERSONA_SLUG"];
   await agentRegistry.register({
     agent_id: agentId,
     session_id: sessionId ?? `pid-${process.pid}`,
@@ -117,6 +122,7 @@ async function start(): Promise<void> {
     hostname,
     pid: process.pid,
     claude_pid: process.ppid,
+    ...(personaSlug ? { persona: personaSlug } : {}),
   });
 
   // Start heartbeat

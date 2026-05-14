@@ -107,6 +107,19 @@ export class FileTransport implements Transport {
       registered_at: Date.now(),
       last_heartbeat: Date.now(),
       status: "online",
+      // Phase 0 of task-490 (Live Focus & Attention Graph):
+      // forward persona slug from the registration call onto the
+      // persisted AgentRecord. `undefined` when the agent was
+      // launched without PERSONA_SLUG set — downstream consumers
+      // treat absent persona as "anonymous / unknown" and fall
+      // back to the default color (claude-personas DEFAULT_COLOR).
+      persona: agent.persona,
+      // `focus` starts unset — populated later via the set_focus
+      // MCP tool (Phase 1) or inference (Phase 4). Stored as
+      // `null` rather than `undefined` so the field is always
+      // present in the serialized JSON, making it easy to detect
+      // "cleared" vs "never set" once the inference pipeline lands.
+      focus: null,
     };
 
     this.writeAtomic(

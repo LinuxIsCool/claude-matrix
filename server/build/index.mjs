@@ -14687,7 +14687,20 @@ var FileTransport = class _FileTransport {
       display_name: path.basename(agent.project_dir),
       registered_at: Date.now(),
       last_heartbeat: Date.now(),
-      status: "online"
+      status: "online",
+      // Phase 0 of task-490 (Live Focus & Attention Graph):
+      // forward persona slug from the registration call onto the
+      // persisted AgentRecord. `undefined` when the agent was
+      // launched without PERSONA_SLUG set — downstream consumers
+      // treat absent persona as "anonymous / unknown" and fall
+      // back to the default color (claude-personas DEFAULT_COLOR).
+      persona: agent.persona,
+      // `focus` starts unset — populated later via the set_focus
+      // MCP tool (Phase 1) or inference (Phase 4). Stored as
+      // `null` rather than `undefined` so the field is always
+      // present in the serialized JSON, making it easy to detect
+      // "cleared" vs "never set" once the inference pipeline lands.
+      focus: null
     };
     this.writeAtomic(
       path.join(this.agentsDir, `${agent.agent_id}.json`),
@@ -23349,13 +23362,15 @@ transport.onMessage(agentId, (event) => {
 });
 async function start() {
   await transport.start();
+  const personaSlug = process.env["PERSONA_SLUG"];
   await agentRegistry.register({
     agent_id: agentId,
     session_id: sessionId ?? `pid-${process.pid}`,
     project_dir: projectDir,
     hostname: hostname4,
     pid: process.pid,
-    claude_pid: process.ppid
+    claude_pid: process.ppid,
+    ...personaSlug ? { persona: personaSlug } : {}
   });
   agentRegistry.startHeartbeat();
   notificationBuffer.writeNotificationFile();
