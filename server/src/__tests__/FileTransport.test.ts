@@ -150,6 +150,160 @@ describe("FileTransport", () => {
       expect(record.focus).toBeNull();
     });
 
+    // ── Phase 1 of task-490 — updateAgentFocus + onAgentChange ────────
+
+    it("updateAgentFocus writes focus to record", async () => {
+      transport = new FileTransport({ dataDir: tmpDir, agentId: "agent-a@host" });
+      await transport.start();
+      await transport.registerAgent(makeRegistration("agent-a@host"));
+
+      await transport.updateAgentFocus("agent-a@host", {
+        task_id: 490,
+        source: "explicit",
+        started_at: 1700000000000,
+      });
+
+      const filePath = path.join(tmpDir, "agents", "agent-a@host.json");
+      const record = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      expect(record.focus).toEqual({
+        task_id: 490,
+        source: "explicit",
+        started_at: 1700000000000,
+      });
+    });
+
+    it("updateAgentFocus(null) clears focus", async () => {
+      transport = new FileTransport({ dataDir: tmpDir, agentId: "agent-a@host" });
+      await transport.start();
+      await transport.registerAgent(makeRegistration("agent-a@host"));
+
+      await transport.updateAgentFocus("agent-a@host", {
+        task_id: 490,
+        source: "explicit",
+        started_at: Date.now(),
+      });
+      await transport.updateAgentFocus("agent-a@host", null);
+
+      const filePath = path.join(tmpDir, "agents", "agent-a@host.json");
+      const record = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      expect(record.focus).toBeNull();
+    });
+
+    it("updateAgentFocus preserves persona", async () => {
+      transport = new FileTransport({ dataDir: tmpDir, agentId: "agent-a@host" });
+      await transport.start();
+      await transport.registerAgent(
+        makeRegistration("agent-a@host", { persona: "matt" }),
+      );
+
+      await transport.updateAgentFocus("agent-a@host", {
+        task_id: 490,
+        source: "explicit",
+        started_at: Date.now(),
+      });
+
+      const filePath = path.join(tmpDir, "agents", "agent-a@host.json");
+      const record = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      expect(record.persona).toBe("matt");
+    });
+
+    it("updateAgentFocus throws on unknown agent_id", async () => {
+      transport = new FileTransport({ dataDir: tmpDir, agentId: "agent-a@host" });
+      await transport.start();
+
+      await expect(
+        transport.updateAgentFocus("nonexistent@host", {
+          task_id: 1,
+          source: "explicit",
+          started_at: Date.now(),
+        }),
+      ).rejects.toThrow(/not registered/i);
+    });
+
+    it("set_focus then heartbeat preserves focus", async () => {
+      // Double-check the read-merge-write invariant via the public API
+      // path: set_focus, then heartbeat — focus must survive both.
+      transport = new FileTransport({ dataDir: tmpDir, agentId: "agent-a@host" });
+      await transport.start();
+      await transport.registerAgent(makeRegistration("agent-a@host"));
+
+      const focus = {
+        task_id: 490,
+        source: "explicit" as const,
+        started_at: 1700000000000,
+      };
+      await transport.updateAgentFocus("agent-a@host", focus);
+      await transport.heartbeat("agent-a@host");
+
+      const filePath = path.join(tmpDir, "agents", "agent-a@host.json");
+      const record = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      expect(record.focus).toEqual(focus);
+    });
+
+    it("onAgentChange fires synthetic 'focus' event on updateAgentFocus", async () => {
+      transport = new FileTransport({ dataDir: tmpDir, agentId: "agent-a@host" });
+      await transport.start();
+      await transport.registerAgent(makeRegistration("agent-a@host"));
+
+      const events: Array<[string, string]> = [];
+      transport.onAgentChange((id, kind) => {
+        events.push([id, kind]);
+      });
+
+      await transport.updateAgentFocus("agent-a@host", {
+        task_id: 490,
+        source: "explicit",
+        started_at: Date.now(),
+      });
+
+      // Synthetic fireAgentChange is debounced — wait 250ms (>200ms window)
+      await new Promise((r) => setTimeout(r, 250));
+
+      // At least one "focus" event for our agent_id should have landed.
+      // chokidar may ALSO fire a "change" (which then resets the
+      // debounce timer), so we tolerate either kind — what matters is
+      // SOMETHING fired for agent-a@host. The synthetic dispatch
+      // guarantees liveness; chokidar timing is filesystem-dependent.
+      const aEvents = events.filter(([id]) => id === "agent-a@host");
+      expect(aEvents.length).toBeGreaterThanOrEqual(1);
+      expect(aEvents.map((e) => e[1])).toEqual(
+        expect.arrayContaining([expect.stringMatching(/^(focus|change)$/)]),
+      );
+    });
+
+    it("onAgentChange debounces rapid writes (per-agent)", async () => {
+      transport = new FileTransport({ dataDir: tmpDir, agentId: "agent-a@host" });
+      await transport.start();
+      await transport.registerAgent(makeRegistration("agent-a@host"));
+
+      const events: Array<[string, string]> = [];
+      transport.onAgentChange((id, kind) => {
+        events.push([id, kind]);
+      });
+
+      // Fire 5 rapid focus updates within debounce window — should
+      // collapse to a single callback for agent-a@host.
+      for (let i = 0; i < 5; i++) {
+        await transport.updateAgentFocus("agent-a@host", {
+          task_id: 100 + i,
+          source: "explicit",
+          started_at: Date.now(),
+        });
+      }
+
+      await new Promise((r) => setTimeout(r, 300));
+
+      // Per-agent debouncing: exactly 1 synthetic event from our 5
+      // rapid writes for agent-a@host. (chokidar may add async
+      // change events too, but those are also debounced by the same
+      // per-agent timer.) Accept up to 2 to be tolerant of test-
+      // environment timing skew where the LAST chokidar 'change'
+      // arrives just AFTER the synthetic debounce window closed.
+      const aEvents = events.filter(([id]) => id === "agent-a@host");
+      expect(aEvents.length).toBeLessThanOrEqual(2);
+      expect(aEvents.length).toBeGreaterThanOrEqual(1);
+    });
+
     it("heartbeat preserves persona + focus fields", async () => {
       // Critical invariant from task-490 §17: heartbeat read-merge-writes
       // the record, so persona + focus survive 30s heartbeat cycles.

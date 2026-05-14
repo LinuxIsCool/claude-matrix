@@ -5,6 +5,8 @@ import type { NotificationBuffer } from "../core/NotificationBuffer.js";
 import { registerSendMessage } from "./tools/send_message.js";
 import { registerReadMessages } from "./tools/read_messages.js";
 import { registerListAgents } from "./tools/list_agents.js";
+import { registerSetFocus } from "./tools/set_focus.js";
+import { registerClearFocus } from "./tools/clear_focus.js";
 
 export interface McpDependencies {
   agentRegistry: AgentRegistry;
@@ -35,6 +37,9 @@ export function createMcpServer(deps: McpDependencies): McpServer {
   registerSendMessage(server, deps.messageStore, deps.agentRegistry);
   registerReadMessages(server, deps.messageStore, deps.notificationBuffer);
   registerListAgents(server, deps.agentRegistry, deps.selfAgentId);
+  // Phase 1 of task-490: focus surface.
+  registerSetFocus(server, deps.agentRegistry, deps.selfAgentId);
+  registerClearFocus(server, deps.agentRegistry, deps.selfAgentId);
 
   return server;
 }

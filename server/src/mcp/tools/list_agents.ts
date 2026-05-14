@@ -33,7 +33,15 @@ export function registerListAgents(
           const age = Math.round(
             (Date.now() - a.last_heartbeat) / 1000,
           );
-          return `${a.agent_id}${isSelf} | ${a.status} | project: ${a.project_dir} | last seen: ${age}s ago`;
+          // Phase 1 of task-490: surface persona + focus alongside core fields.
+          const personaBit = a.persona ? ` | persona: ${a.persona}` : "";
+          const focusBit = a.focus
+            ? ` | focus: task-${a.focus.task_id} (${a.focus.source})`
+            : "";
+          return (
+            `${a.agent_id}${isSelf} | ${a.status} | project: ${a.project_dir}` +
+            `${personaBit}${focusBit} | last seen: ${age}s ago`
+          );
         });
 
         return {

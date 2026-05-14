@@ -14617,6 +14617,7 @@ var AGENT_STALE_THRESHOLD_MS = 9e4;
 var AGENT_HEARTBEAT_INTERVAL_MS = 3e4;
 
 // src/transport/FileTransport.ts
+var AGENT_WATCH_DEBOUNCE_MS = 200;
 var FileTransport = class _FileTransport {
   constructor(config2) {
     this.config = config2;
@@ -14628,7 +14629,13 @@ var FileTransport = class _FileTransport {
   messagesDir;
   notificationsDir;
   watcher = null;
+  agentsWatcher = null;
   messageCallbacks = /* @__PURE__ */ new Map();
+  // Phase 1 of task-490: registry-change subscribers. Array (not Map)
+  // because we expect ≤2 subscribers per process (AgentRegistry +
+  // optionally a direct MCP consumer); fan-out is cheap.
+  agentChangeCallbacks = [];
+  agentChangeDebounce = /* @__PURE__ */ new Map();
   healthy = false;
   async start() {
     fs.mkdirSync(this.agentsDir, { recursive: true });
@@ -14652,6 +14659,28 @@ var FileTransport = class _FileTransport {
     this.watcher.on("error", (err) => {
       console.error("[FileTransport] Watcher error:", err);
     });
+    this.agentsWatcher = watch(this.agentsDir, {
+      persistent: true,
+      ignoreInitial: true,
+      depth: 0,
+      ignored: (filePath) => {
+        if (filePath === this.agentsDir) return false;
+        const base = path.basename(filePath);
+        return base.startsWith(".tmp-") || !base.endsWith(".json");
+      }
+    });
+    this.agentsWatcher.on("add", (filePath) => {
+      this.fireAgentChange(this.agentIdFromPath(filePath), "add");
+    });
+    this.agentsWatcher.on("change", (filePath) => {
+      this.fireAgentChange(this.agentIdFromPath(filePath), "change");
+    });
+    this.agentsWatcher.on("unlink", (filePath) => {
+      this.fireAgentChange(this.agentIdFromPath(filePath), "delete");
+    });
+    this.agentsWatcher.on("error", (err) => {
+      console.error("[FileTransport] Agents watcher error:", err);
+    });
     this.healthy = true;
   }
   async stop() {
@@ -14660,6 +14689,14 @@ var FileTransport = class _FileTransport {
       await this.watcher.close();
       this.watcher = null;
     }
+    if (this.agentsWatcher) {
+      await this.agentsWatcher.close();
+      this.agentsWatcher = null;
+    }
+    for (const timer of this.agentChangeDebounce.values()) {
+      clearTimeout(timer);
+    }
+    this.agentChangeDebounce.clear();
   }
   async send(event) {
     const recipientId = this.extractRecipient(event);
@@ -14803,6 +14840,42 @@ var FileTransport = class _FileTransport {
       console.error(`[FileTransport] Heartbeat failed for ${agentId2}:`, err);
     }
   }
+  /**
+   * Update the `focus` field on an agent's record. Set `focus` to
+   * `null` to clear. Read-merge-write — all other fields (persona,
+   * heartbeat, registration metadata) survive.
+   *
+   * Throws if the agent record does not exist on disk (so callers
+   * can't accidentally persist a focus for an unknown agent_id).
+   *
+   * Phase 1 of task-490.
+   */
+  async updateAgentFocus(agentId2, focus) {
+    _FileTransport.validateAgentId(agentId2);
+    const filePath = path.join(this.agentsDir, `${agentId2}.json`);
+    let raw;
+    try {
+      raw = fs.readFileSync(filePath, "utf8");
+    } catch (err) {
+      if (err.code === "ENOENT") {
+        throw new Error(`Cannot update focus: agent ${agentId2} not registered`);
+      }
+      throw err;
+    }
+    const record2 = JSON.parse(raw);
+    record2.focus = focus;
+    this.writeAtomic(filePath, JSON.stringify(record2, null, 2));
+    this.fireAgentChange(agentId2, "focus");
+  }
+  /**
+   * Subscribe to agent registry changes. Multiple subscribers OK —
+   * each receives every (agentId, kind) tuple.
+   *
+   * Phase 1 of task-490.
+   */
+  onAgentChange(callback) {
+    this.agentChangeCallbacks.push(callback);
+  }
   // --- Internal helpers ---
   /** Reject agent IDs that could escape the data directory */
   static validateAgentId(agentId2) {
@@ -14857,6 +14930,42 @@ var FileTransport = class _FileTransport {
   formatTimestamp(ms) {
     return new Date(ms).toISOString().replace(/[-:T]/g, "").replace(/\.\d{3}Z/, "");
   }
+  /**
+   * Derive an agent_id from an absolute file path like
+   * `/.../agents/pid-12345@host.json`. Returns the base name without
+   * the `.json` suffix. No validation here — callers receive raw
+   * filesystem events and downstream code can reject as needed.
+   */
+  agentIdFromPath(filePath) {
+    return path.basename(filePath).replace(/\.json$/, "");
+  }
+  /**
+   * Debounce + fan out an agent change event. Multiple writes to the
+   * same agent file within `AGENT_WATCH_DEBOUNCE_MS` coalesce into a
+   * single callback fire (using the last kind seen). Per-agent
+   * debouncing (not global) so concurrent set_focus calls on two
+   * different agents both fire promptly.
+   *
+   * Phase 1 of task-490.
+   */
+  fireAgentChange(agentId2, kind) {
+    const existing = this.agentChangeDebounce.get(agentId2);
+    if (existing) {
+      clearTimeout(existing);
+    }
+    const timer = setTimeout(() => {
+      this.agentChangeDebounce.delete(agentId2);
+      for (const cb of this.agentChangeCallbacks) {
+        try {
+          cb(agentId2, kind);
+        } catch (err) {
+          console.error("[FileTransport] onAgentChange callback failed:", err);
+        }
+      }
+    }, AGENT_WATCH_DEBOUNCE_MS);
+    timer.unref?.();
+    this.agentChangeDebounce.set(agentId2, timer);
+  }
 };
 
 // src/core/AgentRegistry.ts
@@ -14869,6 +14978,10 @@ var AgentRegistry = class {
   cachedAgents = [];
   cacheExpiry = 0;
   cacheTtlMs = 5e3;
+  // Phase 1 of task-490: external subscribers to agent-change events.
+  // Wired through to transport.onAgentChange if the transport supports it.
+  changeCallbacks = [];
+  changeWired = false;
   async register(registration) {
     await this.transport.registerAgent(registration);
   }
@@ -14888,6 +15001,72 @@ var AgentRegistry = class {
   async getSelf() {
     const agents = await this.getAll();
     return agents.find((a) => a.agent_id === this.selfAgentId);
+  }
+  /**
+   * Set the live focus for THIS agent. Forwarded to the underlying
+   * transport. Throws if the transport doesn't support focus (Phase 2
+   * SocketTransport / Phase 3 MatrixTransport may not — Phase 1
+   * FileTransport does).
+   *
+   * Invalidates the discovery cache so the next getAll() reads fresh
+   * data from the transport. Belt-and-suspenders alongside the
+   * onAgentChange invalidation — same-process callers see the change
+   * even if they haven't subscribed.
+   *
+   * Phase 1 of task-490.
+   */
+  async setFocus(focus) {
+    if (!this.transport.updateAgentFocus) {
+      throw new Error("Transport does not support focus updates");
+    }
+    await this.transport.updateAgentFocus(this.selfAgentId, focus);
+    this.invalidateCache();
+  }
+  /**
+   * Clear the live focus for THIS agent. Persists `focus: null`.
+   *
+   * Phase 1 of task-490.
+   */
+  async clearFocus() {
+    if (!this.transport.updateAgentFocus) {
+      throw new Error("Transport does not support focus updates");
+    }
+    await this.transport.updateAgentFocus(this.selfAgentId, null);
+    this.invalidateCache();
+  }
+  /**
+   * Subscribe to agent-change events from the transport. Multiple
+   * subscribers OK — callbacks fan out in registration order.
+   *
+   * Wires the transport-level fan-out lazily on first subscribe so
+   * registries created without focus subscribers don't pay the
+   * watcher cost.
+   *
+   * Phase 1 of task-490.
+   */
+  onAgentChange(callback) {
+    this.changeCallbacks.push(callback);
+    if (!this.changeWired && this.transport.onAgentChange) {
+      this.transport.onAgentChange((agentId2, kind) => {
+        this.invalidateCache();
+        for (const cb of this.changeCallbacks) {
+          try {
+            cb(agentId2, kind);
+          } catch (err) {
+            console.error("[AgentRegistry] change callback failed:", err);
+          }
+        }
+      });
+      this.changeWired = true;
+    }
+  }
+  /**
+   * Force-expire the 5s discovery cache. Used by setFocus/clearFocus
+   * and the onAgentChange wiring so consumers see fresh data
+   * immediately after a known mutation.
+   */
+  invalidateCache() {
+    this.cacheExpiry = 0;
   }
   startHeartbeat() {
     this.heartbeatTimer = setInterval(async () => {
@@ -23249,7 +23428,9 @@ function registerListAgents(server, registry2, selfAgentId) {
           const age = Math.round(
             (Date.now() - a.last_heartbeat) / 1e3
           );
-          return `${a.agent_id}${isSelf} | ${a.status} | project: ${a.project_dir} | last seen: ${age}s ago`;
+          const personaBit = a.persona ? ` | persona: ${a.persona}` : "";
+          const focusBit = a.focus ? ` | focus: task-${a.focus.task_id} (${a.focus.source})` : "";
+          return `${a.agent_id}${isSelf} | ${a.status} | project: ${a.project_dir}${personaBit}${focusBit} | last seen: ${age}s ago`;
         });
         return {
           content: [
@@ -23267,6 +23448,96 @@ ${formatted.join("\n")}`
             {
               type: "text",
               text: `Discovery failed: ${err instanceof Error ? err.message : String(err)}`
+            }
+          ],
+          isError: true
+        };
+      }
+    }
+  );
+}
+
+// src/mcp/tools/set_focus.ts
+function registerSetFocus(server, registry2, selfAgentId) {
+  server.registerTool(
+    "set_focus",
+    {
+      title: "Set Focus",
+      description: "Mark this agent as actively working on a specific backlog task. The focus appears in list_agents output and powers UIs that render 'what is everyone working on'. Pass task_id as integer or 'task-NNN' string. Call /focus from a slash command for interactive use.",
+      inputSchema: {
+        task_id: external_exports.union([
+          external_exports.number().int().positive(),
+          external_exports.string().regex(/^task-\d+$/i, "Must be 'task-NNN' format")
+        ]).describe(
+          "Backlog task ID to focus on. Accepts bare integer (e.g. 490) or 'task-490' string form. Both normalize to integer internally."
+        ),
+        source: external_exports.enum(["explicit", "inferred-strong", "inferred-weak", "stale"]).default("explicit").describe(
+          "Source confidence tier. Default 'explicit' \u2014 change only when calling from an inference pipeline."
+        ),
+        confidence: external_exports.number().min(0).max(1).optional().describe(
+          "Optional 0..1 scalar. Defaults from source tier: explicit=1.0, inferred-strong=0.7, inferred-weak=0.4, stale=0.1."
+        )
+      }
+    },
+    async ({ task_id, source, confidence }) => {
+      try {
+        const taskIdInt = typeof task_id === "number" ? task_id : parseInt(task_id.replace(/^task-/i, ""), 10);
+        const focus = {
+          task_id: taskIdInt,
+          source: source ?? "explicit",
+          started_at: Date.now(),
+          ...confidence !== void 0 ? { confidence } : {}
+        };
+        await registry2.setFocus(focus);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Focus set: task-${taskIdInt} (source: ${focus.source})` + (confidence !== void 0 ? ` (confidence: ${confidence})` : "")
+            }
+          ]
+        };
+      } catch (err) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to set focus: ${err.message}`
+            }
+          ],
+          isError: true
+        };
+      }
+    }
+  );
+}
+
+// src/mcp/tools/clear_focus.ts
+function registerClearFocus(server, registry2, _selfAgentId) {
+  server.registerTool(
+    "clear_focus",
+    {
+      title: "Clear Focus",
+      description: "Clear this agent's live focus task. The record is persisted as focus=null (distinct from focus=undefined) so consumers can detect explicit dismissal.",
+      inputSchema: {}
+    },
+    async () => {
+      try {
+        await registry2.clearFocus();
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Focus cleared."
+            }
+          ]
+        };
+      } catch (err) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to clear focus: ${err.message}`
             }
           ],
           isError: true
@@ -23298,6 +23569,8 @@ function createMcpServer(deps) {
   registerSendMessage(server, deps.messageStore, deps.agentRegistry);
   registerReadMessages(server, deps.messageStore, deps.notificationBuffer);
   registerListAgents(server, deps.agentRegistry, deps.selfAgentId);
+  registerSetFocus(server, deps.agentRegistry, deps.selfAgentId);
+  registerClearFocus(server, deps.agentRegistry, deps.selfAgentId);
   return server;
 }
 

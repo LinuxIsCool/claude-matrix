@@ -9,9 +9,22 @@ import type {
   MatrixEvent,
   AgentRecord,
   AgentRegistration,
+  AgentFocus,
+  AgentChangeKind,
   MessageFilter,
 } from "../types/index.js";
 import { AGENT_STALE_THRESHOLD_MS } from "../types/agent.js";
+
+/**
+ * Debounce window for the agents/ directory watcher. Rapid bursts of
+ * writes (e.g. set_focus immediately followed by heartbeat) coalesce
+ * to a single onAgentChange fire. 200ms is conservative — long enough
+ * to merge a heartbeat-during-set_focus race, short enough to feel
+ * "live" in a kanban glow UI.
+ *
+ * Phase 1 of task-490.
+ */
+export const AGENT_WATCH_DEBOUNCE_MS = 200;
 
 /**
  * Phase 1 transport: filesystem-based messaging.
@@ -26,7 +39,13 @@ export class FileTransport implements Transport {
   private readonly messagesDir: string;
   private readonly notificationsDir: string;
   private watcher: FSWatcher | null = null;
+  private agentsWatcher: FSWatcher | null = null;
   private messageCallbacks = new Map<string, (event: MatrixEvent) => void>();
+  // Phase 1 of task-490: registry-change subscribers. Array (not Map)
+  // because we expect ≤2 subscribers per process (AgentRegistry +
+  // optionally a direct MCP consumer); fan-out is cheap.
+  private agentChangeCallbacks: Array<(agentId: string, kind: AgentChangeKind) => void> = [];
+  private agentChangeDebounce = new Map<string, ReturnType<typeof setTimeout>>();
   private healthy = false;
 
   constructor(private readonly config: TransportConfig) {
@@ -65,6 +84,34 @@ export class FileTransport implements Transport {
       console.error("[FileTransport] Watcher error:", err);
     });
 
+    // Phase 1 of task-490: watch the agents/ directory so registry
+    // consumers can react to focus changes (and registrations /
+    // deletions) without polling. Debounced to coalesce rapid bursts
+    // (e.g. set_focus followed milliseconds later by a heartbeat).
+    this.agentsWatcher = watch(this.agentsDir, {
+      persistent: true,
+      ignoreInitial: true,
+      depth: 0,
+      ignored: (filePath: string) => {
+        if (filePath === this.agentsDir) return false;
+        const base = path.basename(filePath);
+        return base.startsWith(".tmp-") || !base.endsWith(".json");
+      },
+    });
+
+    this.agentsWatcher.on("add", (filePath: string) => {
+      this.fireAgentChange(this.agentIdFromPath(filePath), "add");
+    });
+    this.agentsWatcher.on("change", (filePath: string) => {
+      this.fireAgentChange(this.agentIdFromPath(filePath), "change");
+    });
+    this.agentsWatcher.on("unlink", (filePath: string) => {
+      this.fireAgentChange(this.agentIdFromPath(filePath), "delete");
+    });
+    this.agentsWatcher.on("error", (err) => {
+      console.error("[FileTransport] Agents watcher error:", err);
+    });
+
     this.healthy = true;
   }
 
@@ -74,6 +121,15 @@ export class FileTransport implements Transport {
       await this.watcher.close();
       this.watcher = null;
     }
+    if (this.agentsWatcher) {
+      await this.agentsWatcher.close();
+      this.agentsWatcher = null;
+    }
+    // Cancel any pending debounce timers so stop() is clean.
+    for (const timer of this.agentChangeDebounce.values()) {
+      clearTimeout(timer);
+    }
+    this.agentChangeDebounce.clear();
   }
 
   async send(event: MatrixEvent): Promise<void> {
@@ -249,6 +305,49 @@ export class FileTransport implements Transport {
     }
   }
 
+  /**
+   * Update the `focus` field on an agent's record. Set `focus` to
+   * `null` to clear. Read-merge-write — all other fields (persona,
+   * heartbeat, registration metadata) survive.
+   *
+   * Throws if the agent record does not exist on disk (so callers
+   * can't accidentally persist a focus for an unknown agent_id).
+   *
+   * Phase 1 of task-490.
+   */
+  async updateAgentFocus(agentId: string, focus: AgentFocus | null): Promise<void> {
+    FileTransport.validateAgentId(agentId);
+    const filePath = path.join(this.agentsDir, `${agentId}.json`);
+    let raw: string;
+    try {
+      raw = fs.readFileSync(filePath, "utf8");
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+        throw new Error(`Cannot update focus: agent ${agentId} not registered`);
+      }
+      throw err;
+    }
+    const record: AgentRecord = JSON.parse(raw);
+    record.focus = focus;
+    this.writeAtomic(filePath, JSON.stringify(record, null, 2));
+    // Fire a synthetic "focus" change event immediately rather than
+    // waiting for chokidar — keeps the same-process call path tight
+    // (set_focus then list_agents on the same process sees fresh data
+    // without any debounce delay). chokidar will ALSO fire a "change"
+    // event ~200ms later; consumers must be idempotent on duplicates.
+    this.fireAgentChange(agentId, "focus");
+  }
+
+  /**
+   * Subscribe to agent registry changes. Multiple subscribers OK —
+   * each receives every (agentId, kind) tuple.
+   *
+   * Phase 1 of task-490.
+   */
+  onAgentChange(callback: (agentId: string, kind: AgentChangeKind) => void): void {
+    this.agentChangeCallbacks.push(callback);
+  }
+
   // --- Internal helpers ---
 
   /** Reject agent IDs that could escape the data directory */
@@ -315,6 +414,44 @@ export class FileTransport implements Transport {
       .toISOString()
       .replace(/[-:T]/g, "")
       .replace(/\.\d{3}Z/, "");
+  }
+
+  /**
+   * Derive an agent_id from an absolute file path like
+   * `/.../agents/pid-12345@host.json`. Returns the base name without
+   * the `.json` suffix. No validation here — callers receive raw
+   * filesystem events and downstream code can reject as needed.
+   */
+  private agentIdFromPath(filePath: string): string {
+    return path.basename(filePath).replace(/\.json$/, "");
+  }
+
+  /**
+   * Debounce + fan out an agent change event. Multiple writes to the
+   * same agent file within `AGENT_WATCH_DEBOUNCE_MS` coalesce into a
+   * single callback fire (using the last kind seen). Per-agent
+   * debouncing (not global) so concurrent set_focus calls on two
+   * different agents both fire promptly.
+   *
+   * Phase 1 of task-490.
+   */
+  private fireAgentChange(agentId: string, kind: AgentChangeKind): void {
+    const existing = this.agentChangeDebounce.get(agentId);
+    if (existing) {
+      clearTimeout(existing);
+    }
+    const timer = setTimeout(() => {
+      this.agentChangeDebounce.delete(agentId);
+      for (const cb of this.agentChangeCallbacks) {
+        try {
+          cb(agentId, kind);
+        } catch (err) {
+          console.error("[FileTransport] onAgentChange callback failed:", err);
+        }
+      }
+    }, AGENT_WATCH_DEBOUNCE_MS);
+    timer.unref?.();
+    this.agentChangeDebounce.set(agentId, timer);
   }
 
 }
